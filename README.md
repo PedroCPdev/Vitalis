@@ -1,15 +1,15 @@
 # Vitalis API
 
-API RESTful desenvolvida em **ASP.NET Core (.NET 10)** responsável pelo domínio do **Tutor** no sistema PetHub.
+API RESTful desenvolvida em **ASP.NET Core (.NET 10)** responsável pelo domínio do **Responsável** no sistema PetHub.
 
 O PetHub é um sistema veterinário composto por dois backends que compartilham o mesmo banco Oracle:
 
 | Backend | Tecnologia | Responsabilidade |
 |---|---|---|
-| **Vitalis (este)** | C# .NET 10 | Cadastro e autenticação de Tutores, Endereços, Contatos e Lembretes |
+| **Vitalis (este)** | C# .NET 10 | Cadastro e autenticação de Responsáveis, Endereços, Contatos e Lembretes |
 | **pethub-java** | Java 21 + Spring Boot 3 | Veterinários, Pets, Consultas, Diagnósticos, Vacinas e Wearable IoT |
 
-O app mobile consome ambos os backends. O Java chama a API do Vitalis para buscar tutores por CPF e para criar lembretes de eventos veterinários.
+O app mobile consome ambos os backends. O Java chama a API do Vitalis para buscar responsáveis por CPF e para criar lembretes de eventos veterinários.
 
 ---
 
@@ -20,7 +20,7 @@ O app mobile consome ambos os backends. O Java chama a API do Vitalis para busca
 - Entity Framework Core 10
 - Oracle.EntityFrameworkCore
 - BCrypt.Net-Next (hash de senhas)
-- Swashbuckle (Swagger / OpenAPI)
+- Swashbuckle (Swagger / OpenAPI 3.0)
 
 ---
 
@@ -41,7 +41,7 @@ export PATH="$PATH:$HOME/.dotnet/tools"
 
 ```bash
 # 1. Clonar o repositório
-git clone https://github.com/seu-usuario/seu-repositorio.git
+git clone https://github.com/pedrocpdev/Vitalis.git
 cd Vitalis
 
 # 2. Restaurar dependências
@@ -81,45 +81,45 @@ Em `appsettings.json`:
 
 ## Documentação das rotas
 
-### Tutores — `/api/tutores`
+### Responsáveis — `/api/responsaveis`
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
-| `GET` | `/api/tutores` | Lista todos os tutores | — |
-| `GET` | `/api/tutores/{id}` | Busca tutor por ID com endereços e contatos | — |
-| `GET` | `/api/tutores/buscar?cpf={cpf}` | Busca tutor por CPF (chamado pelo Java) | `X-Service-Token` |
-| `POST` | `/api/tutores/cadastro` | Cadastra novo tutor | — |
-| `POST` | `/api/tutores/login` | Autentica tutor por e-mail e senha | — |
-| `PUT` | `/api/tutores/{id}` | Atualiza dados do tutor | — |
-| `DELETE` | `/api/tutores/{id}` | Remove tutor | — |
+| `GET` | `/api/responsaveis` | Lista todos os responsáveis | — |
+| `GET` | `/api/responsaveis/{id}` | Busca responsável por ID com endereços e contatos | — |
+| `GET` | `/api/responsaveis/buscar?cpf={cpf}` | Busca responsável por CPF (chamado pelo Java) | `X-Service-Token` |
+| `POST` | `/api/responsaveis/cadastro` | Cadastra novo responsável | — |
+| `POST` | `/api/responsaveis/login` | Autentica responsável por e-mail e senha | — |
+| `PUT` | `/api/responsaveis/{id}` | Atualiza dados do responsável | — |
+| `DELETE` | `/api/responsaveis/{id}` | Remove responsável | — |
 
 ---
 
-### Endereços — `/api/tutores/{tutorId}/enderecos`
+### Endereços — `/api/responsaveis/{responsavelId}/enderecos`
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/api/tutores/{tutorId}/enderecos` | Lista endereços do tutor |
-| `GET` | `/api/tutores/{tutorId}/enderecos/{id}` | Busca endereço por ID |
-| `POST` | `/api/tutores/{tutorId}/enderecos` | Adiciona endereço ao tutor |
-| `PUT` | `/api/tutores/{tutorId}/enderecos/{id}` | Atualiza endereço |
-| `DELETE` | `/api/tutores/{tutorId}/enderecos/{id}` | Remove endereço |
-| `PATCH` | `/api/tutores/{tutorId}/enderecos/{id}/principal` | Define como endereço principal |
+| `GET` | `/api/responsaveis/{responsavelId}/enderecos` | Lista endereços do responsável |
+| `GET` | `/api/responsaveis/{responsavelId}/enderecos/{id}` | Busca endereço por ID |
+| `POST` | `/api/responsaveis/{responsavelId}/enderecos` | Adiciona endereço ao responsável |
+| `PUT` | `/api/responsaveis/{responsavelId}/enderecos/{id}` | Atualiza endereço |
+| `DELETE` | `/api/responsaveis/{responsavelId}/enderecos/{id}` | Remove endereço |
+| `PATCH` | `/api/responsaveis/{responsavelId}/enderecos/{id}/principal` | Define como endereço principal |
 
 > Ao marcar um endereço como principal, os demais são automaticamente desmarcados.
 
 ---
 
-### Contatos — `/api/tutores/{tutorId}/contatos`
+### Contatos — `/api/responsaveis/{responsavelId}/contatos`
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/api/tutores/{tutorId}/contatos` | Lista contatos do tutor |
-| `GET` | `/api/tutores/{tutorId}/contatos/{id}` | Busca contato por ID |
-| `POST` | `/api/tutores/{tutorId}/contatos` | Adiciona contato ao tutor |
-| `PUT` | `/api/tutores/{tutorId}/contatos/{id}` | Atualiza contato |
-| `DELETE` | `/api/tutores/{tutorId}/contatos/{id}` | Remove contato |
-| `PATCH` | `/api/tutores/{tutorId}/contatos/{id}/principal` | Define como contato principal |
+| `GET` | `/api/responsaveis/{responsavelId}/contatos` | Lista contatos do responsável |
+| `GET` | `/api/responsaveis/{responsavelId}/contatos/{id}` | Busca contato por ID |
+| `POST` | `/api/responsaveis/{responsavelId}/contatos` | Adiciona contato ao responsável |
+| `PUT` | `/api/responsaveis/{responsavelId}/contatos/{id}` | Atualiza contato |
+| `DELETE` | `/api/responsaveis/{responsavelId}/contatos/{id}` | Remove contato |
+| `PATCH` | `/api/responsaveis/{responsavelId}/contatos/{id}/principal` | Define como contato principal |
 
 ---
 
@@ -129,8 +129,8 @@ Em `appsettings.json`:
 |---|---|---|---|
 | `GET` | `/api/lembretes` | Lista todos os lembretes | — |
 | `GET` | `/api/lembretes/{id}` | Busca lembrete por ID | — |
-| `GET` | `/api/lembretes/tutor/{tutorId}` | Lista lembretes de um tutor | — |
-| `GET` | `/api/lembretes/tutor/{tutorId}/tipo/{tipo}` | Filtra por tipo (VACINA, CONSULTA, EXAME, MEDICAMENTO) | — |
+| `GET` | `/api/lembretes/responsavel/{responsavelId}` | Lista lembretes de um responsável | — |
+| `GET` | `/api/lembretes/responsavel/{responsavelId}/tipo/{tipo}` | Filtra por tipo (VACINA, CONSULTA, EXAME, MEDICAMENTO, HIDRATACAO) | — |
 | `POST` | `/api/lembretes` | Cria lembrete (chamado pelo Java) | `X-Service-Token` |
 | `PATCH` | `/api/lembretes/{id}/status` | Atualiza status do lembrete | — |
 | `DELETE` | `/api/lembretes/{id}` | Remove lembrete | — |
@@ -141,9 +141,9 @@ Em `appsettings.json`:
 
 O backend Java (`pethub-java`) chama dois endpoints deste serviço:
 
-**Buscar tutor por CPF** — ao cadastrar um Pet na clínica:
+**Buscar responsável por CPF** — ao cadastrar um Pet na clínica:
 ```
-GET /api/tutores/buscar?cpf=00000000000
+GET /api/responsaveis/buscar?cpf=00000000000
 Header: X-Service-Token: {valor configurado}
 ```
 
@@ -151,7 +151,7 @@ Header: X-Service-Token: {valor configurado}
 ```
 POST /api/lembretes
 Header: X-Service-Token: {valor configurado}
-Body: { tutorId, petId, tipo, dataAgendada, mensagem, referenciaId, referenciaTipo }
+Body: { responsavelId, petId, tipo, dataAgendada, mensagem, referenciaId, referenciaTipo }
 ```
 
 ---
@@ -161,27 +161,27 @@ Body: { tutorId, petId, tipo, dataAgendada, mensagem, referenciaId, referenciaTi
 ```
 Vitalis/
 ├── Controllers/
-│   ├── TutoresApiController.cs
-│   ├── TutorEnderecoController.cs
-│   ├── TutorContatoController.cs
+│   ├── ResponsaveisApiController.cs
+│   ├── ResponsavelEnderecoController.cs
+│   ├── ResponsavelContatoController.cs
 │   └── LembretesApiController.cs
 ├── Dados/
 │   └── AppDbContext.cs
 ├── Dto/
-│   ├── CadastrarTutorDto.cs
+│   ├── CadastrarResponsavelDto.cs
 │   ├── LoginDto.cs
 │   ├── CriarLembreteDto.cs
 │   └── AtualizarStatusDto.cs
 ├── Models/
-│   ├── Tutor.cs
-│   ├── TutorEndereco.cs
-│   ├── TutorContato.cs
+│   ├── Responsavel.cs
+│   ├── ResponsavelEndereco.cs
+│   ├── ResponsavelContato.cs
 │   ├── Lembrete.cs
 │   └── Enums.cs
 ├── Repositories/
-│   ├── ITutorRepository.cs / TutorRepository.cs
-│   ├── ITutorEnderecoRepository.cs / TutorEnderecoRepository.cs
-│   ├── ITutorContatoRepository.cs / TutorContatoRepository.cs
+│   ├── IResponsavelRepository.cs / ResponsavelRepository.cs
+│   ├── IResponsavelEnderecoRepository.cs / ResponsavelEnderecoRepository.cs
+│   ├── IResponsavelContatoRepository.cs / ResponsavelContatoRepository.cs
 │   └── ILembreteRepository.cs / LembreteRepository.cs
 ├── Migrations/
 ├── appsettings.json
@@ -192,7 +192,7 @@ Vitalis/
 
 ## Senhas e segurança
 
-- Senhas de tutores são armazenadas com hash **BCrypt** — nunca em texto puro
+- Senhas dos responsáveis são armazenadas com hash **BCrypt** — nunca em texto puro
 - A senha **nunca é retornada** em nenhum response da API
 - Endpoints de integração com o Java são protegidos por `X-Service-Token` no header
 
@@ -200,8 +200,4 @@ Vitalis/
 
 ## Integrantes
 
-- Ana Flavia Camelo - RM561489
-- Gustavo Kenji Terada - RM562745
-- João Guilherme Carvalho Novaes - RM566234
-- Pedro Chasci Puga - RM565154
-- Lucas Figueiredo Vieira - RM561342
+- Pedro — RM565154
