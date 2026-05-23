@@ -200,4 +200,8 @@ Vitalis/
 
 ## Integrantes
 
-- Pedro — RM565154
+- Ana Flavia Camelo - RM561489
+- Gustavo Kenji Terada - RM562745
+- João Guilherme Carvalho Novaes - RM566234
+- Pedro Chasci Puga - RM565154
+- Lucas Figueiredo Vieira - RM561342
