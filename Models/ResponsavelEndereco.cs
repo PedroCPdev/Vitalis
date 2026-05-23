@@ -1,13 +1,13 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-[Table("TB_TUTOR_ENDERECO")]
-public class TutorEndereco
+[Table("TB_RESPONSAVEL_ENDERECO")]
+public class ResponsavelEndereco
 {
     [Key][Column("ID")] public long Id { get; set; }
 
-    [Column("TUTOR_ID")] public long TutorId { get; set; }
-    [ForeignKey("TutorId")] public Tutor? Tutor { get; set; }
+    [Column("RESPONSAVEL_ID")] public long ResponsavelId { get; set; }
+    [ForeignKey("ResponsavelId")] public Responsavel? Responsavel { get; set; }
 
     [Column("LOGRADOURO")][Required] public string Logradouro { get; set; } = null!;
     [Column("NUMERO")][Required]    public string Numero { get; set; } = null!;
@@ -16,10 +16,10 @@ public class TutorEndereco
     [Column("CIDADE")][Required]    public string Cidade { get; set; } = null!;
 
     [Column("ESTADO")][Required, StringLength(2)]
-    public string Estado { get; set; } = null!;  
+    public string Estado { get; set; } = null!;
 
     [Column("CEP")][Required, StringLength(8)]
-    public string Cep { get; set; } = null!;   
+    public string Cep { get; set; } = null!;
 
     [Column("PRINCIPAL")] public bool Principal { get; set; }
 }

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-public class CadastrarTutorDto
+public class CadastrarResponsavelDto
 {
     [Required] public string Nome  { get; set; } = null!;
     [Required] public string Cpf   { get; set; } = null!;

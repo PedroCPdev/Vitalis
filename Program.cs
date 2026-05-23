@@ -6,9 +6,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseOracle(builder.Configuration.GetConnectionString("OracleConnection")));
 
-builder.Services.AddScoped<ITutorRepository,         TutorRepository>();
-builder.Services.AddScoped<ITutorEnderecoRepository, TutorEnderecoRepository>();
-builder.Services.AddScoped<ITutorContatoRepository,  TutorContatoRepository>();
+builder.Services.AddScoped<IResponsavelRepository,         ResponsavelRepository>();
+builder.Services.AddScoped<IResponsavelEnderecoRepository, ResponsavelEnderecoRepository>();
+builder.Services.AddScoped<IResponsavelContatoRepository,  ResponsavelContatoRepository>();
 builder.Services.AddScoped<ILembreteRepository,      LembreteRepository>();
 
 builder.Services.AddControllers();
@@ -21,7 +21,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title       = "Vitalis API",
         Version     = "v1",
-        Description = "API do domínio do Tutor — PetHub"
+        Description = "API do domínio do Responsavel — PetHub"
     });
 });
 

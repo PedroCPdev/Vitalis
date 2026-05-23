@@ -19,7 +19,7 @@ public class LembretesApiController : ControllerBase
     public IActionResult GetAll()
         => Ok(_repo.GetAll().Select(l => new
         {
-            l.Id, l.TutorId, l.PetId, l.Tipo,
+            l.Id, l.ResponsavelId, l.PetId, l.Tipo,
             l.DataAgendada, l.Mensagem, l.Status
         }));
 
@@ -31,17 +31,17 @@ public class LembretesApiController : ControllerBase
         return Ok(lembrete);
     }
 
-    [HttpGet("tutor/{tutorId:long}")]
-    public IActionResult GetByTutor(long tutorId)
+    [HttpGet("responsavel/{responsavelId:long}")]
+    public IActionResult GetByResponsavel(long responsavelId)
     {
-        var lembretes = _repo.GetByTutorId(tutorId);
+        var lembretes = _repo.GetByResponsavelId(responsavelId);
         return Ok(lembretes);
     }
 
-    [HttpGet("tutor/{tutorId:long}/tipo/{tipo}")]
-    public IActionResult GetByTutorETipo(long tutorId, TipoLembrete tipo)
+    [HttpGet("responsavel/{responsavelId:long}/tipo/{tipo}")]
+    public IActionResult GetByResponsavelETipo(long responsavelId, TipoLembrete tipo)
     {
-        var lembretes = _repo.GetByTutorIdETipo(tutorId, tipo);
+        var lembretes = _repo.GetByResponsavelIdETipo(responsavelId, tipo);
         return Ok(lembretes);
     }
 
@@ -57,7 +57,7 @@ public class LembretesApiController : ControllerBase
 
         var lembrete = new Lembrete
         {
-            TutorId        = dto.TutorId,
+            ResponsavelId        = dto.ResponsavelId,
             PetId          = dto.PetId,
             Tipo           = dto.Tipo,
             DataAgendada   = dto.DataAgendada,

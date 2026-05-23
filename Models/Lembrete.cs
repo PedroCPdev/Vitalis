@@ -7,15 +7,15 @@ public class Lembrete
 {
     [Key][Column("ID")] public long Id { get; set; }
 
-    [Column("TUTOR_ID")] public long TutorId { get; set; }
-    [ForeignKey("TutorId")] public Tutor? Tutor { get; set; }
+    [Column("RESPONSAVEL_ID")] public long ResponsavelId { get; set; }
+    [ForeignKey("ResponsavelId")] public Responsavel? Responsavel { get; set; }
 
-    [Column("PET_ID")] public long PetId { get; set; } 
+    [Column("PET_ID")] public long PetId { get; set; }
 
     [Column("TIPO")][Required]
     public TipoLembrete Tipo { get; set; }
 
-    [Column("DATA_AGENDADA")] public DateTime DataAgendada { get; set; }
+    [Column("DATA_AGENDADA")] public DateOnly DataAgendada { get; set; } 
 
     [Column("MENSAGEM")][Required] public string Mensagem { get; set; } = null!;
 

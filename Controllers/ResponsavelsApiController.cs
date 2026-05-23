@@ -2,13 +2,13 @@ using Microsoft.AspNetCore.Mvc;
 using Vitalis.Repositories;
 
 [ApiController]
-[Route("api/tutores")]
-public class TutoresApiController : ControllerBase
+[Route("api/responsavel")]
+public class ResponsavelsApiController : ControllerBase
 {
-    private readonly ITutorRepository _repo;
+    private readonly IResponsavelRepository _repo;
     private readonly IConfiguration _config;
 
-    public TutoresApiController(ITutorRepository repo, IConfiguration config)
+    public ResponsavelsApiController(IResponsavelRepository repo, IConfiguration config)
     {
         _repo = repo;
         _config = config;
@@ -17,24 +17,24 @@ public class TutoresApiController : ControllerBase
     [HttpGet]
     public IActionResult GetAll()
     {
-        var tutores = _repo.GetAll().Select(t => new
+        var responsavels = _repo.GetAll().Select(t => new
         {
             t.Id, t.Nome, t.Email, t.Cpf, t.Ativo, t.CreatedAt
         });
-        return Ok(tutores);
+        return Ok(responsavels);
     }
 
     [HttpGet("{id:long}")]
     public IActionResult GetById(long id)
     {
-        var tutor = _repo.GetById(id);
-        if (tutor == null) return NotFound(new { erro = "Tutor não encontrado" });
+        var responsavel = _repo.GetById(id);
+        if (responsavel == null) return NotFound(new { erro = "Responsavel não encontrado" });
 
         return Ok(new
         {
-            tutor.Id, tutor.Nome, tutor.Email, tutor.Cpf,
-            tutor.Ativo, tutor.CreatedAt,
-            tutor.Enderecos, tutor.Contatos
+            responsavel.Id, responsavel.Nome, responsavel.Email, responsavel.Cpf,
+            responsavel.Ativo, responsavel.CreatedAt,
+            responsavel.Enderecos, responsavel.Contatos
         });
     }
 
@@ -47,14 +47,14 @@ public class TutoresApiController : ControllerBase
         if (string.IsNullOrWhiteSpace(cpf))
             return BadRequest(new { erro = "CPF é obrigatório" });
 
-        var tutor = _repo.GetByCpf(cpf);
-        if (tutor == null) return NotFound(new { erro = "Tutor não encontrado" });
+        var responsavel = _repo.GetByCpf(cpf);
+        if (responsavel == null) return NotFound(new { erro = "Responsavel não encontrado" });
 
-        return Ok(new { tutor.Id, tutor.Nome, tutor.Cpf, tutor.Email, tutor.Ativo });
+        return Ok(new { responsavel.Id, responsavel.Nome, responsavel.Cpf, responsavel.Email, responsavel.Ativo });
     }
 
     [HttpPost("cadastro")]
-    public IActionResult Cadastrar([FromBody] CadastrarTutorDto dto)
+    public IActionResult Cadastrar([FromBody] CadastrarResponsavelDto dto)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
@@ -62,7 +62,7 @@ public class TutoresApiController : ControllerBase
         if (_repo.GetByCpf(dto.Cpf) != null)
             return Conflict(new { erro = "CPF já cadastrado" });
 
-        var tutor = new Tutor
+        var responsavel = new Responsavel
         {
             Nome  = dto.Nome,
             Cpf   = dto.Cpf,
@@ -71,9 +71,9 @@ public class TutoresApiController : ControllerBase
             Ativo = true
         };
 
-        _repo.Add(tutor);
-        return CreatedAtAction(nameof(GetById), new { id = tutor.Id },
-            new { tutor.Id, tutor.Nome, tutor.Email });
+        _repo.Add(responsavel);
+        return CreatedAtAction(nameof(GetById), new { id = responsavel.Id },
+            new { responsavel.Id, responsavel.Nome, responsavel.Email });
     }
 
     [HttpPost("login")]
@@ -82,24 +82,24 @@ public class TutoresApiController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var tutor = _repo.GetByEmail(dto.Email);
-        if (tutor == null || !BCrypt.Net.BCrypt.Verify(dto.Senha, tutor.Senha))
+        var responsavel = _repo.GetByEmail(dto.Email);
+        if (responsavel == null || !BCrypt.Net.BCrypt.Verify(dto.Senha, responsavel.Senha))
             return Unauthorized(new { erro = "Credenciais inválidas" });
 
-        if (!tutor.Ativo)
+        if (!responsavel.Ativo)
             return Unauthorized(new { erro = "Conta desativada" });
 
-        return Ok(new { tutor.Id, tutor.Nome, tutor.Email });
+        return Ok(new { responsavel.Id, responsavel.Nome, responsavel.Email });
     }
 
     [HttpPut("{id:long}")]
-    public IActionResult Update(long id, [FromBody] CadastrarTutorDto dto)
+    public IActionResult Update(long id, [FromBody] CadastrarResponsavelDto dto)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
         var existente = _repo.GetById(id);
-        if (existente == null) return NotFound(new { erro = "Tutor não encontrado" });
+        if (existente == null) return NotFound(new { erro = "Responsavel não encontrado" });
 
         existente.Nome  = dto.Nome;
         existente.Email = dto.Email;
@@ -112,8 +112,8 @@ public class TutoresApiController : ControllerBase
     [HttpDelete("{id:long}")]
     public IActionResult Delete(long id)
     {
-        var tutor = _repo.GetById(id);
-        if (tutor == null) return NotFound(new { erro = "Tutor não encontrado" });
+        var responsavel = _repo.GetById(id);
+        if (responsavel == null) return NotFound(new { erro = "Responsavel não encontrado" });
 
         _repo.Delete(id);
         return NoContent();

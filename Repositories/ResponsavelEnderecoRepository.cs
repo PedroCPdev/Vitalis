@@ -1,39 +1,39 @@
 namespace Vitalis.Repositories;
 
-public class TutorEnderecoRepository : ITutorEnderecoRepository
+public class ResponsavelEnderecoRepository : IResponsavelEnderecoRepository
 {
     private readonly AppDbContext _context;
 
-    public TutorEnderecoRepository(AppDbContext context)
+    public ResponsavelEnderecoRepository(AppDbContext context)
     {
         _context = context;
     }
 
-    public IEnumerable<TutorEndereco> GetByTutorId(long tutorId)
+    public IEnumerable<ResponsavelEndereco> GetByResponsavelId(long responsavelId)
         => _context.Enderecos
-            .Where(e => e.TutorId == tutorId)
+            .Where(e => e.ResponsavelId == responsavelId)
             .ToList();
 
-    public TutorEndereco? GetById(long id)
+    public ResponsavelEndereco? GetById(long id)
         => _context.Enderecos.FirstOrDefault(e => e.Id == id);
 
-    public void Add(TutorEndereco endereco)
+    public void Add(ResponsavelEndereco endereco)
     {
-        bool temOutros = _context.Enderecos.Any(e => e.TutorId == endereco.TutorId);
+        bool temOutros = _context.Enderecos.Any(e => e.ResponsavelId == endereco.ResponsavelId);
         if (!temOutros)
             endereco.Principal = true;
 
         if (endereco.Principal)
-            DesmarcarOutros(endereco.TutorId, excludeId: null);
+            DesmarcarOutros(endereco.ResponsavelId, excludeId: null);
 
         _context.Enderecos.Add(endereco);
         _context.SaveChanges();
     }
 
-    public void Update(TutorEndereco endereco)
+    public void Update(ResponsavelEndereco endereco)
     {
         if (endereco.Principal)
-            DesmarcarOutros(endereco.TutorId, excludeId: endereco.Id);
+            DesmarcarOutros(endereco.ResponsavelId, excludeId: endereco.Id);
 
         _context.Enderecos.Update(endereco);
         _context.SaveChanges();
@@ -50,7 +50,7 @@ public class TutorEnderecoRepository : ITutorEnderecoRepository
         if (endereco.Principal)
         {
             var substituto = _context.Enderecos
-                .Where(e => e.TutorId == endereco.TutorId)
+                .Where(e => e.ResponsavelId == endereco.ResponsavelId)
                 .OrderByDescending(e => e.Id)
                 .FirstOrDefault();
 
@@ -62,9 +62,9 @@ public class TutorEnderecoRepository : ITutorEnderecoRepository
         }
     }
 
-    public void SetPrincipal(long tutorId, long enderecoId)
+    public void SetPrincipal(long responsavelId, long enderecoId)
     {
-        DesmarcarOutros(tutorId, excludeId: enderecoId);
+        DesmarcarOutros(responsavelId, excludeId: enderecoId);
 
         var alvo = GetById(enderecoId);
         if (alvo != null)
@@ -74,10 +74,10 @@ public class TutorEnderecoRepository : ITutorEnderecoRepository
         }
     }
 
-    private void DesmarcarOutros(long tutorId, long? excludeId)
+    private void DesmarcarOutros(long responsavelId, long? excludeId)
     {
         var outros = _context.Enderecos
-            .Where(e => e.TutorId == tutorId && e.Principal &&
+            .Where(e => e.ResponsavelId == responsavelId && e.Principal &&
                         (excludeId == null || e.Id != excludeId))
             .ToList();
 

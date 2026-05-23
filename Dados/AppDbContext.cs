@@ -4,17 +4,17 @@ public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions options) : base(options) { }
 
-    public DbSet<Tutor>         Tutores   { get; set; }
-    public DbSet<TutorEndereco> Enderecos { get; set; }
-    public DbSet<TutorContato>  Contatos  { get; set; }
+    public DbSet<Responsavel>         Responsavels   { get; set; }
+    public DbSet<ResponsavelEndereco> Enderecos { get; set; }
+    public DbSet<ResponsavelContato>  Contatos  { get; set; }
     public DbSet<Lembrete>      Lembretes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Lembrete>()
-            .HasOne(l => l.Tutor)
+            .HasOne(l => l.Responsavel)
             .WithMany(t => t.Lembretes)
-            .HasForeignKey(l => l.TutorId);
+            .HasForeignKey(l => l.ResponsavelId);
 
         modelBuilder.Entity<Lembrete>()
             .Property(l => l.Tipo)
@@ -28,19 +28,19 @@ public class AppDbContext : DbContext
             .Property(l => l.CreatedAt)
             .HasDefaultValueSql("SYSDATE");
 
-        modelBuilder.Entity<Tutor>()
+        modelBuilder.Entity<Responsavel>()
             .Property(t => t.CreatedAt)
             .HasDefaultValueSql("SYSDATE");
 
-        modelBuilder.Entity<Tutor>()
+        modelBuilder.Entity<Responsavel>()
             .Property(t => t.Ativo)
             .HasColumnType("NUMBER(1)");
 
-        modelBuilder.Entity<TutorEndereco>()
+        modelBuilder.Entity<ResponsavelEndereco>()
             .Property(e => e.Principal)
             .HasColumnType("NUMBER(1)");
 
-        modelBuilder.Entity<TutorContato>()
+        modelBuilder.Entity<ResponsavelContato>()
             .Property(c => c.Principal)
             .HasColumnType("NUMBER(1)");
     }

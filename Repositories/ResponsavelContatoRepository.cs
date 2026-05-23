@@ -1,39 +1,39 @@
 namespace Vitalis.Repositories;
 
-public class TutorContatoRepository : ITutorContatoRepository
+public class ResponsavelContatoRepository : IResponsavelContatoRepository
 {
     private readonly AppDbContext _context;
 
-    public TutorContatoRepository(AppDbContext context)
+    public ResponsavelContatoRepository(AppDbContext context)
     {
         _context = context;
     }
 
-    public IEnumerable<TutorContato> GetByTutorId(long tutorId)
+    public IEnumerable<ResponsavelContato> GetByResponsavelId(long responsavelId)
         => _context.Contatos
-            .Where(c => c.TutorId == tutorId)
+            .Where(c => c.ResponsavelId == responsavelId)
             .ToList();
 
-    public TutorContato? GetById(long id)
+    public ResponsavelContato? GetById(long id)
         => _context.Contatos.FirstOrDefault(c => c.Id == id);
 
-    public void Add(TutorContato contato)
+    public void Add(ResponsavelContato contato)
     {
-        bool temOutros = _context.Contatos.Any(c => c.TutorId == contato.TutorId);
+        bool temOutros = _context.Contatos.Any(c => c.ResponsavelId == contato.ResponsavelId);
         if (!temOutros)
             contato.Principal = true;
 
         if (contato.Principal)
-            DesmarcarOutros(contato.TutorId, excludeId: null);
+            DesmarcarOutros(contato.ResponsavelId, excludeId: null);
 
         _context.Contatos.Add(contato);
         _context.SaveChanges();
     }
 
-    public void Update(TutorContato contato)
+    public void Update(ResponsavelContato contato)
     {
         if (contato.Principal)
-            DesmarcarOutros(contato.TutorId, excludeId: contato.Id);
+            DesmarcarOutros(contato.ResponsavelId, excludeId: contato.Id);
 
         _context.Contatos.Update(contato);
         _context.SaveChanges();
@@ -50,7 +50,7 @@ public class TutorContatoRepository : ITutorContatoRepository
         if (contato.Principal)
         {
             var substituto = _context.Contatos
-                .Where(c => c.TutorId == contato.TutorId)
+                .Where(c => c.ResponsavelId == contato.ResponsavelId)
                 .OrderByDescending(c => c.Id)
                 .FirstOrDefault();
 
@@ -62,9 +62,9 @@ public class TutorContatoRepository : ITutorContatoRepository
         }
     }
 
-    public void SetPrincipal(long tutorId, long contatoId)
+    public void SetPrincipal(long responsavelId, long contatoId)
     {
-        DesmarcarOutros(tutorId, excludeId: contatoId);
+        DesmarcarOutros(responsavelId, excludeId: contatoId);
 
         var alvo = GetById(contatoId);
         if (alvo != null)
@@ -74,10 +74,10 @@ public class TutorContatoRepository : ITutorContatoRepository
         }
     }
 
-    private void DesmarcarOutros(long tutorId, long? excludeId)
+    private void DesmarcarOutros(long responsavelId, long? excludeId)
     {
         var outros = _context.Contatos
-            .Where(c => c.TutorId == tutorId && c.Principal &&
+            .Where(c => c.ResponsavelId == responsavelId && c.Principal &&
                         (excludeId == null || c.Id != excludeId))
             .ToList();
 

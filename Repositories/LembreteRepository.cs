@@ -14,25 +14,25 @@ public class LembreteRepository : ILembreteRepository
 
     public IEnumerable<Lembrete> GetAll()
         => _context.Lembretes
-            .Include(l => l.Tutor)
+            .Include(l => l.Responsavel)
             .OrderByDescending(l => l.DataAgendada)
             .ToList();
 
-    public IEnumerable<Lembrete> GetByTutorId(long tutorId)
+    public IEnumerable<Lembrete> GetByResponsavelId(long responsavelId)
         => _context.Lembretes
-            .Where(l => l.TutorId == tutorId)
+            .Where(l => l.ResponsavelId == responsavelId)
             .OrderByDescending(l => l.DataAgendada)
             .ToList();
 
-    public IEnumerable<Lembrete> GetByTutorIdETipo(long tutorId, TipoLembrete tipo)
+    public IEnumerable<Lembrete> GetByResponsavelIdETipo(long responsavelId, TipoLembrete tipo)
         => _context.Lembretes
-            .Where(l => l.TutorId == tutorId && l.Tipo == tipo)
+            .Where(l => l.ResponsavelId == responsavelId && l.Tipo == tipo)
             .OrderByDescending(l => l.DataAgendada)
             .ToList();
 
     public Lembrete? GetById(long id)
         => _context.Lembretes
-            .Include(l => l.Tutor)
+            .Include(l => l.Responsavel)
             .FirstOrDefault(l => l.Id == id);
 
     public void Add(Lembrete lembrete)

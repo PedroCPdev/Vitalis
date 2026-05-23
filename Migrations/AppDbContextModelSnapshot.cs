@@ -36,8 +36,9 @@ namespace Vitalis.Migrations
                         .HasColumnName("CREATED_AT")
                         .HasDefaultValueSql("SYSDATE");
 
-                    b.Property<DateTime>("DataAgendada")
-                        .HasColumnType("TIMESTAMP(7)")
+                    b.Property<string>("DataAgendada")
+                        .IsRequired()
+                        .HasColumnType("NVARCHAR2(10)")
                         .HasColumnName("DATA_AGENDADA");
 
                     b.Property<string>("Mensagem")
@@ -57,6 +58,10 @@ namespace Vitalis.Migrations
                         .HasColumnType("NVARCHAR2(2000)")
                         .HasColumnName("REFERENCIA_TIPO");
 
+                    b.Property<long>("ResponsavelId")
+                        .HasColumnType("NUMBER(19)")
+                        .HasColumnName("RESPONSAVEL_ID");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("NVARCHAR2(2000)")
@@ -67,18 +72,14 @@ namespace Vitalis.Migrations
                         .HasColumnType("NVARCHAR2(2000)")
                         .HasColumnName("TIPO");
 
-                    b.Property<long>("TutorId")
-                        .HasColumnType("NUMBER(19)")
-                        .HasColumnName("TUTOR_ID");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TutorId");
+                    b.HasIndex("ResponsavelId");
 
                     b.ToTable("TB_LEMBRETE");
                 });
 
-            modelBuilder.Entity("Tutor", b =>
+            modelBuilder.Entity("Responsavel", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -121,10 +122,10 @@ namespace Vitalis.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TB_TUTOR");
+                    b.ToTable("TB_RESPONSAVEL");
                 });
 
-            modelBuilder.Entity("TutorContato", b =>
+            modelBuilder.Entity("ResponsavelContato", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -137,28 +138,28 @@ namespace Vitalis.Migrations
                         .HasColumnType("NUMBER(1)")
                         .HasColumnName("PRINCIPAL");
 
+                    b.Property<long>("ResponsavelId")
+                        .HasColumnType("NUMBER(19)")
+                        .HasColumnName("RESPONSAVEL_ID");
+
+                    b.Property<string>("Telefone")
+                        .IsRequired()
+                        .HasColumnType("NVARCHAR2(2000)")
+                        .HasColumnName("TELEFONE");
+
                     b.Property<string>("Tipo")
                         .IsRequired()
                         .HasColumnType("NVARCHAR2(2000)")
                         .HasColumnName("TIPO");
 
-                    b.Property<long>("TutorId")
-                        .HasColumnType("NUMBER(19)")
-                        .HasColumnName("TUTOR_ID");
-
-                    b.Property<string>("Valor")
-                        .IsRequired()
-                        .HasColumnType("NVARCHAR2(2000)")
-                        .HasColumnName("VALOR");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TutorId");
+                    b.HasIndex("ResponsavelId");
 
-                    b.ToTable("TB_TUTOR_CONTATO");
+                    b.ToTable("TB_RESPONSAVEL_CONTATO");
                 });
 
-            modelBuilder.Entity("TutorEndereco", b =>
+            modelBuilder.Entity("ResponsavelEndereco", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -207,51 +208,51 @@ namespace Vitalis.Migrations
                         .HasColumnType("NUMBER(1)")
                         .HasColumnName("PRINCIPAL");
 
-                    b.Property<long>("TutorId")
+                    b.Property<long>("ResponsavelId")
                         .HasColumnType("NUMBER(19)")
-                        .HasColumnName("TUTOR_ID");
+                        .HasColumnName("RESPONSAVEL_ID");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TutorId");
+                    b.HasIndex("ResponsavelId");
 
-                    b.ToTable("TB_TUTOR_ENDERECO");
+                    b.ToTable("TB_RESPONSAVEL_ENDERECO");
                 });
 
             modelBuilder.Entity("Lembrete", b =>
                 {
-                    b.HasOne("Tutor", "Tutor")
+                    b.HasOne("Responsavel", "Responsavel")
                         .WithMany("Lembretes")
-                        .HasForeignKey("TutorId")
+                        .HasForeignKey("ResponsavelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Tutor");
+                    b.Navigation("Responsavel");
                 });
 
-            modelBuilder.Entity("TutorContato", b =>
+            modelBuilder.Entity("ResponsavelContato", b =>
                 {
-                    b.HasOne("Tutor", "Tutor")
+                    b.HasOne("Responsavel", "Responsavel")
                         .WithMany("Contatos")
-                        .HasForeignKey("TutorId")
+                        .HasForeignKey("ResponsavelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Tutor");
+                    b.Navigation("Responsavel");
                 });
 
-            modelBuilder.Entity("TutorEndereco", b =>
+            modelBuilder.Entity("ResponsavelEndereco", b =>
                 {
-                    b.HasOne("Tutor", "Tutor")
+                    b.HasOne("Responsavel", "Responsavel")
                         .WithMany("Enderecos")
-                        .HasForeignKey("TutorId")
+                        .HasForeignKey("ResponsavelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Tutor");
+                    b.Navigation("Responsavel");
                 });
 
-            modelBuilder.Entity("Tutor", b =>
+            modelBuilder.Entity("Responsavel", b =>
                 {
                     b.Navigation("Contatos");
 
