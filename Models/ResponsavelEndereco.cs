@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 [Table("TB_RESPONSAVEL_ENDERECO")]
 public class ResponsavelEndereco
@@ -7,7 +8,8 @@ public class ResponsavelEndereco
     [Key][Column("ID")] public long Id { get; set; }
 
     [Column("RESPONSAVEL_ID")] public long ResponsavelId { get; set; }
-    [ForeignKey("ResponsavelId")] public Responsavel? Responsavel { get; set; }
+    [ForeignKey("ResponsavelId")][JsonIgnore]
+    public Responsavel? Responsavel { get; set; }
 
     [Column("LOGRADOURO")][Required] public string Logradouro { get; set; } = null!;
     [Column("NUMERO")][Required]    public string Numero { get; set; } = null!;

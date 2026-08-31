@@ -427,3 +427,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Logs gerados pelo Serilog
+logs/
+
+# Resultados de testes e cobertura
+TestResults/

@@ -86,6 +86,7 @@ public class LembretesApiController : ControllerBase
         var lembrete = _repo.GetById(id);
         if (lembrete == null) return NotFound(new { erro = "Lembrete não encontrado" });
 
+        _repo.Delete(id);
         return NoContent();
     }
 }
