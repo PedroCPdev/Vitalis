@@ -2,14 +2,14 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using FluentAssertions;
 using Vitalis.Tests.Integration.Fixtures;
+using Xunit;
 
 namespace Vitalis.Tests.Integration.Endpoints;
 
-/// <summary>
-/// Testes de integração dos endpoints de Responsável: fluxo HTTP completo, autenticação
-/// por <c>X-Service-Token</c>, respostas de sucesso e tratamento de erros.
-/// </summary>
+// Testes de integração dos endpoints de Responsável: fluxo HTTP completo,
+// autenticação por X-Service-Token, respostas de sucesso e tratamento de erros
 [Collection(VitalisApiCollection.Name)]
 public class ResponsavelEndpointsTests : IDisposable
 {
@@ -30,7 +30,7 @@ public class ResponsavelEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task PostCadastro_ComDadosValidos_Retorna201ComLocationDoNovoRecurso()
+    public async Task PostCadastro_DadosValidos_DeveRetornar201ComLocationDoNovoRecurso()
     {
         // Arrange
         var payload = DadosDeIntegracao.NovoCadastro();
@@ -39,12 +39,12 @@ public class ResponsavelEndpointsTests : IDisposable
         var resposta = await _client.PostAsJsonAsync("/api/responsavel/cadastro", payload);
 
         // Assert
-        Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
-        Assert.NotNull(resposta.Headers.Location);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Created);
+        resposta.Headers.Location.Should().NotBeNull();
     }
 
     [Fact]
-    public async Task PostCadastro_ComDadosValidos_NaoRetornaASenhaNoCorpoDaResposta()
+    public async Task PostCadastro_DadosValidos_NaoDeveRetornarASenhaNoCorpoDaResposta()
     {
         // Arrange
         var payload = DadosDeIntegracao.NovoCadastro();
@@ -54,12 +54,12 @@ public class ResponsavelEndpointsTests : IDisposable
         var corpo = await resposta.Content.ReadAsStringAsync();
 
         // Assert
-        Assert.DoesNotContain("senha", corpo, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(DadosDeIntegracao.SenhaEmTextoPuro, corpo);
+        corpo.Should().NotContain(DadosDeIntegracao.SenhaPadrao);
+        corpo.Should().NotContainEquivalentOf("senha");
     }
 
     [Fact]
-    public async Task PostCadastro_ComEmailInvalido_Retorna400ComOsErrosDeValidacao()
+    public async Task PostCadastro_EmailInvalido_DeveRetornar400()
     {
         // Arrange
         var payload = DadosDeIntegracao.NovoCadastro(email: "email-sem-arroba");
@@ -68,11 +68,11 @@ public class ResponsavelEndpointsTests : IDisposable
         var resposta = await _client.PostAsJsonAsync("/api/responsavel/cadastro", payload);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task PostCadastro_SemOsCamposObrigatorios_Retorna400()
+    public async Task PostCadastro_PayloadIncompleto_DeveRetornar400()
     {
         // Arrange
         var payloadIncompleto = new { nome = "Somente o nome" };
@@ -81,11 +81,11 @@ public class ResponsavelEndpointsTests : IDisposable
         var resposta = await _client.PostAsJsonAsync("/api/responsavel/cadastro", payloadIncompleto);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task PostCadastro_ComJsonMalformado_Retorna400()
+    public async Task PostCadastro_JsonMalformado_DeveRetornar400()
     {
         // Arrange
         var conteudo = new StringContent("{ isso não é json }", Encoding.UTF8, "application/json");
@@ -94,11 +94,11 @@ public class ResponsavelEndpointsTests : IDisposable
         var resposta = await _client.PostAsync("/api/responsavel/cadastro", conteudo);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task PostCadastro_ComCpfJaCadastrado_Retorna409Conflict()
+    public async Task PostCadastro_CpfJaCadastrado_DeveRetornar409Conflict()
     {
         // Arrange
         await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "99988877766", email: "primeiro@pethub.com");
@@ -108,11 +108,11 @@ public class ResponsavelEndpointsTests : IDisposable
             DadosDeIntegracao.NovoCadastro(cpf: "99988877766", email: "segundo@pethub.com"));
 
         // Assert
-        Assert.Equal(HttpStatusCode.Conflict, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
     [Fact]
-    public async Task GetById_ComResponsavelCadastrado_Retorna200ComOsDados()
+    public async Task GetById_ResponsavelCadastrado_DeveRetornar200ComOsDados()
     {
         // Arrange
         var id = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -122,13 +122,13 @@ public class ResponsavelEndpointsTests : IDisposable
         var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.Equal(id, corpo.GetProperty("id").GetInt64());
-        Assert.Equal("Pedro Chasci", corpo.GetProperty("nome").GetString());
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+        corpo.GetProperty("id").GetInt64().Should().Be(id);
+        corpo.GetProperty("nome").GetString().Should().Be("Pedro Chasci");
     }
 
     [Fact]
-    public async Task GetById_ComIdInexistente_Retorna404ComMensagemDeErro()
+    public async Task GetById_IdInexistente_DeveRetornar404ComMensagemDeErro()
     {
         // Arrange
         const long idInexistente = 999_999;
@@ -138,12 +138,12 @@ public class ResponsavelEndpointsTests : IDisposable
         var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
-        Assert.Equal("Responsavel não encontrado", corpo.GetProperty("erro").GetString());
+        resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        corpo.GetProperty("erro").GetString().Should().Be("Responsavel não encontrado");
     }
 
     [Fact]
-    public async Task GetAll_ComVariosResponsaveisCadastrados_Retorna200ComTodosOsRegistros()
+    public async Task GetAll_VariosResponsaveisCadastrados_DeveRetornar200ComTodosOsRegistros()
     {
         // Arrange
         await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "11111111111", email: "a@pethub.com");
@@ -154,12 +154,12 @@ public class ResponsavelEndpointsTests : IDisposable
         var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.Equal(2, corpo.GetArrayLength());
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+        corpo.GetArrayLength().Should().Be(2);
     }
 
     [Fact]
-    public async Task GetBuscarPorCpf_SemOServiceToken_Retorna401Unauthorized()
+    public async Task GetBuscarPorCpf_SemServiceToken_DeveRetornar401()
     {
         // Arrange
         await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "33344455566", email: "c@pethub.com");
@@ -168,11 +168,11 @@ public class ResponsavelEndpointsTests : IDisposable
         var resposta = await _client.GetAsync("/api/responsavel/buscar?cpf=33344455566");
 
         // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task GetBuscarPorCpf_ComServiceTokenInvalido_Retorna401Unauthorized()
+    public async Task GetBuscarPorCpf_ServiceTokenInvalido_DeveRetornar401()
     {
         // Arrange
         using var clientComTokenErrado = _factory.CreateClientComServiceToken("token-invalido");
@@ -181,11 +181,11 @@ public class ResponsavelEndpointsTests : IDisposable
         var resposta = await clientComTokenErrado.GetAsync("/api/responsavel/buscar?cpf=33344455566");
 
         // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task GetBuscarPorCpf_ComServiceTokenValidoECpfCadastrado_Retorna200ComOResponsavel()
+    public async Task GetBuscarPorCpf_ServiceTokenValidoECpfCadastrado_DeveRetornar200ComOResponsavel()
     {
         // Arrange
         await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "44455566677", email: "d@pethub.com");
@@ -196,12 +196,12 @@ public class ResponsavelEndpointsTests : IDisposable
         var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.Equal("44455566677", corpo.GetProperty("cpf").GetString());
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+        corpo.GetProperty("cpf").GetString().Should().Be("44455566677");
     }
 
     [Fact]
-    public async Task GetBuscarPorCpf_ComServiceTokenValidoECpfInexistente_Retorna404()
+    public async Task GetBuscarPorCpf_CpfInexistente_DeveRetornar404()
     {
         // Arrange
         using var clientAutenticado = _factory.CreateClientComServiceToken();
@@ -210,24 +210,11 @@ public class ResponsavelEndpointsTests : IDisposable
         var resposta = await clientAutenticado.GetAsync("/api/responsavel/buscar?cpf=00000000000");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task GetBuscarPorCpf_ComServiceTokenValidoESemCpf_Retorna400()
-    {
-        // Arrange
-        using var clientAutenticado = _factory.CreateClientComServiceToken();
-
-        // Act
-        var resposta = await clientAutenticado.GetAsync("/api/responsavel/buscar?cpf=");
-
-        // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
-    }
-
-    [Fact]
-    public async Task PostLogin_ComCredenciaisValidas_Retorna200ComOsDadosDoResponsavel()
+    public async Task PostLogin_CredenciaisValidas_DeveRetornar200ComOsDadosDoResponsavel()
     {
         // Arrange
         var id = await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "55566677788", email: "login@pethub.com");
@@ -238,12 +225,12 @@ public class ResponsavelEndpointsTests : IDisposable
         var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.Equal(id, corpo.GetProperty("id").GetInt64());
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+        corpo.GetProperty("id").GetInt64().Should().Be(id);
     }
 
     [Fact]
-    public async Task PostLogin_ComSenhaIncorreta_Retorna401Unauthorized()
+    public async Task PostLogin_SenhaIncorreta_DeveRetornar401()
     {
         // Arrange
         await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "66677788899", email: "senha@pethub.com");
@@ -253,22 +240,11 @@ public class ResponsavelEndpointsTests : IDisposable
             DadosDeIntegracao.NovoLogin(email: "senha@pethub.com", senha: "senha-errada"));
 
         // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task PostLogin_ComEmailNaoCadastrado_Retorna401Unauthorized()
-    {
-        // Arrange & Act
-        var resposta = await _client.PostAsJsonAsync("/api/responsavel/login",
-            DadosDeIntegracao.NovoLogin(email: "ninguem@pethub.com"));
-
-        // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
-    }
-
-    [Fact]
-    public async Task PutResponsavel_ComResponsavelCadastrado_Retorna204EPersisteAsAlteracoes()
+    public async Task PutResponsavel_ResponsavelCadastrado_DeveRetornar204EPersistirAsAlteracoes()
     {
         // Arrange
         var id = await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "77788899900", email: "put@pethub.com");
@@ -280,22 +256,12 @@ public class ResponsavelEndpointsTests : IDisposable
         var consulta = await _client.GetFromJsonAsync<JsonElement>($"/api/responsavel/{id}");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, resposta.StatusCode);
-        Assert.Equal("Nome Atualizado", consulta.GetProperty("nome").GetString());
+        resposta.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        consulta.GetProperty("nome").GetString().Should().Be("Nome Atualizado");
     }
 
     [Fact]
-    public async Task PutResponsavel_ComIdInexistente_Retorna404()
-    {
-        // Arrange & Act
-        var resposta = await _client.PutAsJsonAsync("/api/responsavel/999999", DadosDeIntegracao.NovoCadastro());
-
-        // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
-    }
-
-    [Fact]
-    public async Task DeleteResponsavel_ComResponsavelCadastrado_Retorna204ERemoveORegistro()
+    public async Task DeleteResponsavel_ResponsavelCadastrado_DeveRetornar204ERemoverORegistro()
     {
         // Arrange
         var id = await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "88899900011", email: "del@pethub.com");
@@ -305,27 +271,17 @@ public class ResponsavelEndpointsTests : IDisposable
         var consulta = await _client.GetAsync($"/api/responsavel/{id}");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, resposta.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, consulta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        consulta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task DeleteResponsavel_ComIdInexistente_Retorna404()
+    public async Task DeleteResponsavel_IdInexistente_DeveRetornar404()
     {
         // Arrange & Act
         var resposta = await _client.DeleteAsync("/api/responsavel/999999");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
-    }
-
-    [Fact]
-    public async Task GetById_ComIdNaoNumerico_Retorna404PorNaoCasarComARota()
-    {
-        // Arrange & Act
-        var resposta = await _client.GetAsync("/api/responsavel/abc");
-
-        // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

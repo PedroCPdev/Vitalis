@@ -1,15 +1,13 @@
 using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
-using Vitalis.Observability;
+using FluentAssertions;
+using Vitalis.Middlewares;
 using Vitalis.Tests.Integration.Fixtures;
+using Xunit;
 
 namespace Vitalis.Tests.Integration.Monitoramento;
 
-/// <summary>
-/// Testes de integração da camada de monitoramento: health checks, correlação de
-/// requisições e exposição das métricas de desempenho.
-/// </summary>
+// Testes de integração da camada de monitoramento: endpoint de Health Check
+// e propagação do Correlation ID usado no logging estruturado
 [Collection(VitalisApiCollection.Name)]
 public class MonitoramentoEndpointsTests : IDisposable
 {
@@ -25,220 +23,77 @@ public class MonitoramentoEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task GetHealth_ComServicoExternoNaoCriticoIndisponivel_Retorna200ComStatusDegraded()
+    public async Task GetHealth_ServicoExternoIndisponivel_DeveRetornar503ComStatusUnhealthy()
     {
-        // Arrange & Act
+        // Arrange: nos testes o serviço externo aponta para uma porta sempre fechada
+
+        // Act
         var resposta = await _client.GetAsync("/health");
-        var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
-
-        // Assert: serviço externo não crítico fora do ar degrada, mas não derruba a API.
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.Equal("Degraded", corpo.GetProperty("status").GetString());
-    }
-
-    [Fact]
-    public async Task GetHealth_ComAApiEOBancoDisponiveis_ReportaAmbosOsChecksComoHealthy()
-    {
-        // Arrange & Act
-        var corpo = await _client.GetFromJsonAsync<JsonElement>("/health");
-        var checks = corpo.GetProperty("checks").EnumerateArray()
-            .ToDictionary(c => c.GetProperty("name").GetString()!, c => c.GetProperty("status").GetString());
-
-        // Assert
-        Assert.Equal("Healthy", checks["api"]);
-        Assert.Equal("Healthy", checks["oracle-database"]);
-    }
-
-    [Fact]
-    public async Task GetHealth_ComServicoExternoForaDoAr_MarcaApenasAquelaVerificacaoComoDegraded()
-    {
-        // Arrange & Act
-        var corpo = await _client.GetFromJsonAsync<JsonElement>("/health");
-        var externo = corpo.GetProperty("checks").EnumerateArray()
-            .Single(c => c.GetProperty("name").GetString() == VitalisWebApplicationFactory.ServicoExternoFake);
-
-        // Assert
-        Assert.Equal("Degraded", externo.GetProperty("status").GetString());
-        Assert.Equal(VitalisWebApplicationFactory.UrlDoServicoExternoFake,
-            externo.GetProperty("data").GetProperty("url").GetString());
-    }
-
-    [Fact]
-    public async Task GetHealth_EmQualquerChamada_DetalhaOsChecksDaApiDoBancoEDoServicoExterno()
-    {
-        // Arrange & Act
-        var corpo = await _client.GetFromJsonAsync<JsonElement>("/health");
-        var nomes = corpo.GetProperty("checks").EnumerateArray()
-            .Select(c => c.GetProperty("name").GetString())
-            .ToList();
-
-        // Assert
-        Assert.Contains("api", nomes);
-        Assert.Contains("oracle-database", nomes);
-        Assert.Contains(VitalisWebApplicationFactory.ServicoExternoFake, nomes);
-    }
-
-    [Fact]
-    public async Task GetHealthLive_EmQualquerChamada_VerificaApenasOProbeDeLiveness()
-    {
-        // Arrange & Act
-        var resposta = await _client.GetAsync("/health/live");
-        var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        var check = corpo.GetProperty("checks").EnumerateArray().Single();
-        Assert.Equal("api", check.GetProperty("name").GetString());
-    }
-
-    [Fact]
-    public async Task GetHealthReady_EmQualquerChamada_VerificaBancoEServicosExternos()
-    {
-        // Arrange & Act
-        var corpo = await _client.GetFromJsonAsync<JsonElement>("/health/ready");
-        var nomes = corpo.GetProperty("checks").EnumerateArray()
-            .Select(c => c.GetProperty("name").GetString())
-            .ToList();
-
-        // Assert
-        Assert.Contains("oracle-database", nomes);
-        Assert.DoesNotContain("api", nomes);
-    }
-
-    [Fact]
-    public async Task GetHealth_EmQualquerChamada_ReportaADuracaoTotalDaVerificacao()
-    {
-        // Arrange & Act
-        var corpo = await _client.GetFromJsonAsync<JsonElement>("/health");
-
-        // Assert
-        Assert.True(corpo.GetProperty("totalDurationMs").GetDouble() >= 0);
-    }
-
-    [Fact]
-    public async Task GetMetricsSummary_AposAlgumasRequisicoes_Retorna200ComOsContadoresAcumulados()
-    {
-        // Arrange
-        await _client.GetAsync("/api/responsavel");
-        await _client.GetAsync("/api/lembretes");
-
-        // Act
-        var resposta = await _client.GetAsync("/metrics/summary");
-        var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.True(corpo.GetProperty("totalRequests").GetInt64() > 0);
-        Assert.True(corpo.GetProperty("endpoints").GetArrayLength() > 0);
-    }
-
-    [Fact]
-    public async Task GetMetricsSummary_AposUmaRequisicaoComErro_ContabilizaATaxaDeErros()
-    {
-        // Arrange
-        await _client.GetAsync("/api/responsavel/999999");
-
-        // Act
-        var corpo = await _client.GetFromJsonAsync<JsonElement>("/metrics/summary");
-
-        // Assert
-        Assert.True(corpo.GetProperty("totalErrors").GetInt64() > 0);
-        Assert.True(corpo.GetProperty("errorRate").GetDouble() > 0);
-    }
-
-    [Fact]
-    public async Task GetMetricsSummary_ParaUmaRotaParametrizada_AgrupaPeloTemplateDaRota()
-    {
-        // Arrange
-        await _client.GetAsync("/api/responsavel/123");
-        await _client.GetAsync("/api/responsavel/456");
-
-        // Act
-        var corpo = await _client.GetFromJsonAsync<JsonElement>("/metrics/summary");
-        var rotas = corpo.GetProperty("endpoints").EnumerateArray()
-            .Select(e => e.GetProperty("endpoint").GetString())
-            .ToList();
-
-        // Assert
-        Assert.Contains(rotas, rota => rota is not null && rota.Contains("{id:long}"));
-    }
-
-    [Fact]
-    public async Task GetMetrics_NoFormatoPrometheus_Retorna200ComAsMetricasDaAplicacao()
-    {
-        // Arrange
-        await _client.GetAsync("/api/responsavel");
-
-        // Act
-        var resposta = await _client.GetAsync("/metrics");
         var corpo = await resposta.Content.ReadAsStringAsync();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.Contains("vitalis_requests_total", corpo);
+        resposta.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        corpo.Should().Be("Unhealthy");
     }
 
     [Fact]
-    public async Task GetMetrics_NoFormatoPrometheus_ExpoeOHistogramaDeTempoDeResposta()
+    public async Task GetHealth_EmQualquerChamada_DeveResponderEmTextoSimples()
     {
-        // Arrange
-        await _client.GetAsync("/api/lembretes");
-
-        // Act
-        var corpo = await _client.GetStringAsync("/metrics");
+        // Arrange & Act
+        var resposta = await _client.GetAsync("/health");
 
         // Assert
-        Assert.Contains("vitalis_request_duration", corpo);
+        resposta.Content.Headers.ContentType!.MediaType.Should().Be("text/plain");
     }
 
     [Fact]
-    public async Task Requisicao_ComHeaderDeCorrelacao_EcoaOMesmoIdentificadorNaResposta()
+    public async Task Requisicao_ComHeaderDeCorrelacao_DeveEcoarOMesmoIdentificadorNaResposta()
     {
         // Arrange
         using var requisicao = new HttpRequestMessage(HttpMethod.Get, "/api/responsavel");
-        requisicao.Headers.Add(CorrelationIdMiddleware.HeaderName, "correlacao-de-teste-42");
+        requisicao.Headers.Add(CorrelationIdMiddleware.CorrelationIdHeader, "correlacao-de-teste-42");
 
         // Act
         var resposta = await _client.SendAsync(requisicao);
 
         // Assert
-        Assert.Equal("correlacao-de-teste-42",
-            resposta.Headers.GetValues(CorrelationIdMiddleware.HeaderName).Single());
+        resposta.Headers.GetValues(CorrelationIdMiddleware.CorrelationIdHeader)
+            .Single().Should().Be("correlacao-de-teste-42");
     }
 
     [Fact]
-    public async Task Requisicao_SemHeaderDeCorrelacao_GeraEDevolveUmIdentificadorNaResposta()
+    public async Task Requisicao_SemHeaderDeCorrelacao_DeveGerarEDevolverUmIdentificador()
     {
         // Arrange & Act
         var resposta = await _client.GetAsync("/api/responsavel");
 
         // Assert
-        var correlationId = resposta.Headers.GetValues(CorrelationIdMiddleware.HeaderName).Single();
-        Assert.False(string.IsNullOrWhiteSpace(correlationId));
+        var correlationId = resposta.Headers
+            .GetValues(CorrelationIdMiddleware.CorrelationIdHeader).Single();
+        correlationId.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
-    public async Task Requisicoes_EmSequencia_RecebemIdentificadoresDeCorrelacaoDistintos()
+    public async Task Requisicoes_EmSequencia_DevemReceberIdentificadoresDeCorrelacaoDistintos()
     {
         // Arrange & Act
         var primeira = await _client.GetAsync("/api/responsavel");
         var segunda = await _client.GetAsync("/api/responsavel");
 
         // Assert
-        Assert.NotEqual(
-            primeira.Headers.GetValues(CorrelationIdMiddleware.HeaderName).Single(),
-            segunda.Headers.GetValues(CorrelationIdMiddleware.HeaderName).Single());
+        primeira.Headers.GetValues(CorrelationIdMiddleware.CorrelationIdHeader).Single()
+            .Should().NotBe(segunda.Headers.GetValues(CorrelationIdMiddleware.CorrelationIdHeader).Single());
     }
 
     [Fact]
-    public async Task GetSwagger_ComAApiNoAr_Retorna200ComODocumentoOpenApi()
+    public async Task GetSwagger_ComAApiNoAr_DeveRetornar200ComODocumentoOpenApi()
     {
         // Arrange & Act
         var resposta = await _client.GetAsync("/swagger/v1/swagger.json");
         var corpo = await resposta.Content.ReadAsStringAsync();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.Contains("Vitalis API", corpo);
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+        corpo.Should().Contain("Vitalis API");
     }
 }

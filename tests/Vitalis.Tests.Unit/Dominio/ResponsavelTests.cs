@@ -1,87 +1,108 @@
+// Importa o validador de Data Annotations usado pelas entidades
 using System.ComponentModel.DataAnnotations;
-using Vitalis.Tests.Unit.Fixtures;
+// Importa o FluentAssertions para sintaxe expressiva de asserção
+using FluentAssertions;
+// Importa o xUnit para anotações e execução de testes
+using Xunit;
 
 namespace Vitalis.Tests.Unit.Dominio;
 
-/// <summary>Testes das regras de validação da entidade de domínio <see cref="Responsavel"/>.</summary>
+// Suíte de testes unitários para validar as regras puras do Domínio do Responsável
 public class ResponsavelTests
 {
     [Fact]
-    public void Validar_ResponsavelComTodosOsCamposObrigatorios_RetornaValido()
+    public void Validar_DadosValidos_DeveCriarInstanciaSemErros()
     {
-        // Arrange
-        var responsavel = TestData.NovoResponsavel();
-
-        // Act
-        var resultados = Validar(responsavel);
-
-        // Assert
-        Assert.Empty(resultados);
-    }
-
-    [Fact]
-    public void Validar_ResponsavelSemNome_RetornaErroDeCampoObrigatorio()
-    {
-        // Arrange
-        var responsavel = TestData.NovoResponsavel();
-        responsavel.Nome = string.Empty;
-
-        // Act
-        var resultados = Validar(responsavel);
-
-        // Assert
-        Assert.Contains(resultados, r => r.MemberNames.Contains(nameof(Responsavel.Nome)));
-    }
-
-    [Fact]
-    public void Validar_ResponsavelComCpfAcimaDe11Caracteres_RetornaErroDeTamanho()
-    {
-        // Arrange
-        var responsavel = TestData.NovoResponsavel(cpf: "123456789012345");
-
-        // Act
-        var resultados = Validar(responsavel);
-
-        // Assert
-        Assert.Contains(resultados, r => r.MemberNames.Contains(nameof(Responsavel.Cpf)));
-    }
-
-    [Fact]
-    public void Validar_ResponsavelComNomeAcimaDe150Caracteres_RetornaErroDeTamanho()
-    {
-        // Arrange
-        var responsavel = TestData.NovoResponsavel(nome: new string('a', 151));
-
-        // Act
-        var resultados = Validar(responsavel);
-
-        // Assert
-        Assert.Contains(resultados, r => r.MemberNames.Contains(nameof(Responsavel.Nome)));
-    }
-
-    [Fact]
-    public void NovoResponsavel_QuandoInstanciado_IniciaAtivoComColecoesVazias()
-    {
-        // Arrange & Act
+        // Arrange (Preparação)
         var responsavel = new Responsavel
         {
-            Nome = "Lucas Figueiredo",
-            Cpf = "98765432100",
-            Email = "lucas@pethub.com",
-            Senha = TestData.SenhaEmTextoPuro
+            Nome  = "Pedro Chasci",
+            Cpf   = "12345678901",
+            Email = "pedro@pethub.com",
+            Senha = "SenhaSegura@123"
         };
 
-        // Assert
-        Assert.True(responsavel.Ativo);
-        Assert.Empty(responsavel.Enderecos);
-        Assert.Empty(responsavel.Contatos);
-        Assert.Empty(responsavel.Lembretes);
+        // Act (Ação)
+        var erros = Validar(responsavel);
+
+        // Assert (Validação/Asserção)
+        erros.Should().BeEmpty();
+        responsavel.Nome.Should().Be("Pedro Chasci");
+        responsavel.Ativo.Should().BeTrue();
     }
 
-    private static IReadOnlyList<ValidationResult> Validar(Responsavel responsavel)
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void Validar_NomeInvalido_DeveRetornarErroNoCampoNome(string? nomeInvalido)
     {
-        var resultados = new List<ValidationResult>();
-        Validator.TryValidateObject(responsavel, new ValidationContext(responsavel), resultados, validateAllProperties: true);
-        return resultados;
+        // Arrange
+        var responsavel = NovoResponsavelValido();
+        responsavel.Nome = nomeInvalido!;
+
+        // Act
+        var erros = Validar(responsavel);
+
+        // Assert
+        erros.Should().Contain(e => e.MemberNames.Contains(nameof(Responsavel.Nome)));
+    }
+
+    [Fact]
+    public void Validar_CpfAcimaDoLimite_DeveRetornarErroNoCampoCpf()
+    {
+        // Arrange
+        var responsavel = NovoResponsavelValido();
+        responsavel.Cpf = "123456789012345";
+
+        // Act
+        var erros = Validar(responsavel);
+
+        // Assert
+        erros.Should().Contain(e => e.MemberNames.Contains(nameof(Responsavel.Cpf)));
+    }
+
+    [Fact]
+    public void Validar_NomeAcimaDe150Caracteres_DeveRetornarErroNoCampoNome()
+    {
+        // Arrange
+        var responsavel = NovoResponsavelValido();
+        responsavel.Nome = new string('a', 151);
+
+        // Act
+        var erros = Validar(responsavel);
+
+        // Assert
+        erros.Should().Contain(e => e.MemberNames.Contains(nameof(Responsavel.Nome)));
+    }
+
+    [Fact]
+    public void NovoResponsavel_QuandoInstanciado_DeveIniciarAtivoComColecoesVazias()
+    {
+        // Arrange & Act
+        var responsavel = NovoResponsavelValido();
+
+        // Assert
+        responsavel.Ativo.Should().BeTrue();
+        responsavel.Enderecos.Should().BeEmpty();
+        responsavel.Contatos.Should().BeEmpty();
+        responsavel.Lembretes.Should().BeEmpty();
+    }
+
+    // Cria um responsável válido reutilizado na preparação dos cenários
+    private static Responsavel NovoResponsavelValido() => new()
+    {
+        Nome  = "Pedro Chasci",
+        Cpf   = "12345678901",
+        Email = "pedro@pethub.com",
+        Senha = "SenhaSegura@123"
+    };
+
+    // Executa a validação por Data Annotations e devolve os erros encontrados
+    private static List<ValidationResult> Validar(Responsavel responsavel)
+    {
+        var erros = new List<ValidationResult>();
+        Validator.TryValidateObject(responsavel, new ValidationContext(responsavel), erros, true);
+        return erros;
     }
 }

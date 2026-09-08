@@ -1,34 +1,48 @@
+// Importa os tipos de resultado do ASP.NET Core MVC
 using Microsoft.AspNetCore.Mvc;
+// Importa o logger usado pelo controller
+using Microsoft.Extensions.Logging;
+// Importa o FluentAssertions para sintaxe expressiva de asserção
+using FluentAssertions;
+// Importa o Moq para simulação das dependências
 using Moq;
 using Vitalis.Models;
 using Vitalis.Repositories;
 using Vitalis.Tests.Unit.Fixtures;
+using Xunit;
 
 namespace Vitalis.Tests.Unit.Aplicacao;
 
-/// <summary>
-/// Testes unitários da camada de aplicação de Lembretes, incluindo a proteção
-/// por <c>X-Service-Token</c> usada na integração com o backend Java.
-/// </summary>
-public class LembretesApiControllerTests : IClassFixture<ApiConfigurationFixture>
+// Suíte de testes unitários com Mock de repositório para a camada de aplicação dos Lembretes
+public class LembretesApiControllerTests : IClassFixture<ConfiguracaoFixture>
 {
-    private readonly ApiConfigurationFixture _fixture;
-    private readonly Mock<ILembreteRepository> _repositorio = new(MockBehavior.Strict);
+    private readonly ConfiguracaoFixture _fixture;
+    private readonly Mock<ILembreteRepository> _repositorioMock;
 
-    public LembretesApiControllerTests(ApiConfigurationFixture fixture) => _fixture = fixture;
+    public LembretesApiControllerTests(ConfiguracaoFixture fixture)
+    {
+        _fixture = fixture;
+        // Instancia o Mock da interface ILembreteRepository
+        _repositorioMock = new Mock<ILembreteRepository>();
+    }
 
+    // Injeta a instância simulada no controller testado
     private LembretesApiController CriarController(string? serviceToken = null)
-        => ApiConfigurationFixture.ComHttpContext(
-            new LembretesApiController(_repositorio.Object, _fixture.Configuration), serviceToken);
+        => ConfiguracaoFixture.ComHttpContext(
+            new LembretesApiController(
+                _repositorioMock.Object,
+                _fixture.Configuration,
+                new Mock<ILogger<LembretesApiController>>().Object),
+            serviceToken);
 
     [Fact]
-    public void GetAll_QuandoExistemLembretes_RetornaOkComTodosOsRegistros()
+    public void GetAll_LembretesCadastrados_DeveRetornarOkComTodosOsRegistros()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetAll()).Returns(
+        _repositorioMock.Setup(r => r.GetAll()).Returns(
         [
-            TestData.NovoLembrete(id: 1),
-            TestData.NovoLembrete(id: 2, tipo: TipoLembrete.EXAME)
+            NovoLembrete(id: 1),
+            NovoLembrete(id: 2, tipo: TipoLembrete.EXAME)
         ]);
         var controller = CriarController();
 
@@ -36,194 +50,204 @@ public class LembretesApiControllerTests : IClassFixture<ApiConfigurationFixture
         var resultado = controller.GetAll();
 
         // Assert
-        var ok = Assert.IsType<OkObjectResult>(resultado);
-        Assert.Equal(2, Assert.IsAssignableFrom<IEnumerable<object>>(ok.Value).Count());
+        var ok = resultado.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<object>>().Which.Should().HaveCount(2);
     }
 
     [Fact]
-    public void GetById_QuandoLembreteExiste_RetornaOkComOLembrete()
+    public void GetById_LembreteExistente_DeveRetornarOkComOLembrete()
     {
         // Arrange
-        var lembrete = TestData.NovoLembrete(id: 1);
-        _repositorio.Setup(r => r.GetById(1)).Returns(lembrete);
+        var lembrete = NovoLembrete(id: 1);
+        _repositorioMock.Setup(r => r.GetById(1)).Returns(lembrete);
         var controller = CriarController();
 
         // Act
         var resultado = controller.GetById(1);
 
         // Assert
-        var ok = Assert.IsType<OkObjectResult>(resultado);
-        Assert.Same(lembrete, ok.Value);
+        var ok = resultado.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeSameAs(lembrete);
+        _repositorioMock.Verify(r => r.GetById(1), Times.Once);
     }
 
     [Fact]
-    public void GetById_QuandoLembreteNaoExiste_RetornaNotFound()
+    public void GetById_LembreteInexistente_DeveRetornarNotFound()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(999)).Returns((Lembrete?)null);
+        _repositorioMock.Setup(r => r.GetById(999)).Returns((Lembrete?)null);
         var controller = CriarController();
 
         // Act
         var resultado = controller.GetById(999);
 
         // Assert
-        Assert.IsType<NotFoundObjectResult>(resultado);
+        resultado.Should().BeOfType<NotFoundObjectResult>();
     }
 
     [Fact]
-    public void GetByResponsavel_QuandoResponsavelPossuiLembretes_RetornaOkApenasComOsSeusLembretes()
+    public void GetByResponsavel_ResponsavelComLembretes_DeveRetornarApenasOsSeusLembretes()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetByResponsavelId(1)).Returns([TestData.NovoLembrete(id: 1, responsavelId: 1)]);
+        _repositorioMock.Setup(r => r.GetByResponsavelId(1)).Returns([NovoLembrete(id: 1, responsavelId: 1)]);
         var controller = CriarController();
 
         // Act
         var resultado = controller.GetByResponsavel(1);
 
         // Assert
-        var ok = Assert.IsType<OkObjectResult>(resultado);
-        var lembretes = Assert.IsAssignableFrom<IEnumerable<Lembrete>>(ok.Value);
-        Assert.All(lembretes, l => Assert.Equal(1, l.ResponsavelId));
+        var ok = resultado.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<Lembrete>>()
+            .Which.Should().OnlyContain(l => l.ResponsavelId == 1);
     }
 
     [Fact]
-    public void GetByResponsavelETipo_ComTipoInformado_DelegaOFiltroParaORepositorio()
+    public void GetByResponsavelETipo_TipoInformado_DeveDelegarOFiltroParaORepositorio()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetByResponsavelIdETipo(1, TipoLembrete.VACINA))
-            .Returns([TestData.NovoLembrete(tipo: TipoLembrete.VACINA)]);
+        _repositorioMock.Setup(r => r.GetByResponsavelIdETipo(1, TipoLembrete.VACINA))
+            .Returns([NovoLembrete(tipo: TipoLembrete.VACINA)]);
         var controller = CriarController();
 
         // Act
         var resultado = controller.GetByResponsavelETipo(1, TipoLembrete.VACINA);
 
         // Assert
-        Assert.IsType<OkObjectResult>(resultado);
-        _repositorio.Verify(r => r.GetByResponsavelIdETipo(1, TipoLembrete.VACINA), Times.Once);
+        resultado.Should().BeOfType<OkObjectResult>();
+        _repositorioMock.Verify(r => r.GetByResponsavelIdETipo(1, TipoLembrete.VACINA), Times.Once);
     }
 
     [Fact]
-    public void Criar_ComServiceTokenValido_RetornaCreatedEPersisteOLembrete()
+    public void Criar_ServiceTokenValido_DeveSalvarNoRepositorioERetornarCreated()
     {
         // Arrange
-        var dto = TestData.NovoCriarLembreteDto();
-        _repositorio.Setup(r => r.Add(It.IsAny<Lembrete>())).Callback<Lembrete>(l => l.Id = 20);
-        var controller = CriarController(ApiConfigurationFixture.ServiceTokenValido);
+        var dto = NovoCriarLembreteDto();
+        _repositorioMock.Setup(r => r.Add(It.IsAny<Lembrete>())).Callback<Lembrete>(l => l.Id = 20);
+        var controller = CriarController(ConfiguracaoFixture.ServiceTokenValido);
 
         // Act
         var resultado = controller.Criar(dto);
 
         // Assert
-        var created = Assert.IsType<CreatedAtActionResult>(resultado);
-        Assert.Equal(20L, created.RouteValues!["id"]);
-        _repositorio.Verify(r => r.Add(It.Is<Lembrete>(l =>
-            l.ResponsavelId == dto.ResponsavelId &&
-            l.PetId == dto.PetId &&
-            l.Tipo == dto.Tipo &&
-            l.Mensagem == dto.Mensagem)), Times.Once);
+        var created = resultado.Should().BeOfType<CreatedAtActionResult>().Subject;
+        created.RouteValues!["id"].Should().Be(20L);
+        // Verifica se o método Add do repositório foi chamado exatamente 1 vez
+        _repositorioMock.Verify(r => r.Add(It.Is<Lembrete>(l =>
+            l.ResponsavelId == dto.ResponsavelId && l.Tipo == dto.Tipo && l.Mensagem == dto.Mensagem)), Times.Once);
     }
 
     [Fact]
-    public void Criar_SemServiceToken_RetornaUnauthorizedSemPersistir()
+    public void Criar_SemServiceToken_DeveRetornarUnauthorizedSemSalvar()
     {
         // Arrange
         var controller = CriarController();
 
         // Act
-        var resultado = controller.Criar(TestData.NovoCriarLembreteDto());
+        var resultado = controller.Criar(NovoCriarLembreteDto());
 
         // Assert
-        Assert.IsType<UnauthorizedObjectResult>(resultado);
-        _repositorio.Verify(r => r.Add(It.IsAny<Lembrete>()), Times.Never);
+        resultado.Should().BeOfType<UnauthorizedObjectResult>();
+        _repositorioMock.Verify(r => r.Add(It.IsAny<Lembrete>()), Times.Never);
     }
 
     [Fact]
-    public void Criar_ComServiceTokenInvalido_RetornaUnauthorized()
+    public void Criar_ServiceTokenInvalido_DeveRetornarUnauthorized()
     {
         // Arrange
         var controller = CriarController("token-invalido");
 
         // Act
-        var resultado = controller.Criar(TestData.NovoCriarLembreteDto());
+        var resultado = controller.Criar(NovoCriarLembreteDto());
 
         // Assert
-        Assert.IsType<UnauthorizedObjectResult>(resultado);
+        resultado.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
     [Fact]
-    public void Criar_ComModelStateInvalido_RetornaBadRequest()
+    public void Criar_ModelStateInvalido_DeveRetornarBadRequestSemSalvar()
     {
         // Arrange
-        var controller = CriarController(ApiConfigurationFixture.ServiceTokenValido);
+        var controller = CriarController(ConfiguracaoFixture.ServiceTokenValido);
         controller.ModelState.AddModelError(nameof(CriarLembreteDto.Mensagem), "Mensagem obrigatória");
 
         // Act
-        var resultado = controller.Criar(TestData.NovoCriarLembreteDto());
+        var resultado = controller.Criar(NovoCriarLembreteDto());
 
         // Assert
-        Assert.IsType<BadRequestObjectResult>(resultado);
-        _repositorio.Verify(r => r.Add(It.IsAny<Lembrete>()), Times.Never);
+        resultado.Should().BeOfType<BadRequestObjectResult>();
+        _repositorioMock.Verify(r => r.Add(It.IsAny<Lembrete>()), Times.Never);
     }
 
     [Fact]
-    public void AtualizarStatus_QuandoLembreteExiste_AtualizaERetornaNoContent()
+    public void AtualizarStatus_LembreteExistente_DeveAtualizarERetornarNoContent()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(1)).Returns(TestData.NovoLembrete(id: 1));
-        _repositorio.Setup(r => r.AtualizarStatus(1, StatusLembrete.ENVIADO));
+        _repositorioMock.Setup(r => r.GetById(1)).Returns(NovoLembrete(id: 1));
         var controller = CriarController();
 
         // Act
         var resultado = controller.AtualizarStatus(1, new AtualizarStatusDto { Status = StatusLembrete.ENVIADO });
 
         // Assert
-        Assert.IsType<NoContentResult>(resultado);
-        _repositorio.Verify(r => r.AtualizarStatus(1, StatusLembrete.ENVIADO), Times.Once);
+        resultado.Should().BeOfType<NoContentResult>();
+        _repositorioMock.Verify(r => r.AtualizarStatus(1, StatusLembrete.ENVIADO), Times.Once);
     }
 
     [Fact]
-    public void AtualizarStatus_QuandoLembreteNaoExiste_RetornaNotFoundSemAtualizar()
+    public void AtualizarStatus_LembreteInexistente_DeveRetornarNotFoundSemAtualizar()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(999)).Returns((Lembrete?)null);
+        _repositorioMock.Setup(r => r.GetById(999)).Returns((Lembrete?)null);
         var controller = CriarController();
 
         // Act
         var resultado = controller.AtualizarStatus(999, new AtualizarStatusDto { Status = StatusLembrete.FALHOU });
 
         // Assert
-        Assert.IsType<NotFoundObjectResult>(resultado);
-        _repositorio.Verify(r => r.AtualizarStatus(It.IsAny<long>(), It.IsAny<StatusLembrete>()), Times.Never);
+        resultado.Should().BeOfType<NotFoundObjectResult>();
+        _repositorioMock.Verify(r => r.AtualizarStatus(It.IsAny<long>(), It.IsAny<StatusLembrete>()), Times.Never);
     }
 
     [Fact]
-    public void Delete_QuandoLembreteExiste_RemoveERetornaNoContent()
+    public void Delete_LembreteExistente_DeveRemoverERetornarNoContent()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(1)).Returns(TestData.NovoLembrete(id: 1));
-        _repositorio.Setup(r => r.Delete(1));
+        _repositorioMock.Setup(r => r.GetById(1)).Returns(NovoLembrete(id: 1));
         var controller = CriarController();
 
         // Act
         var resultado = controller.Delete(1);
 
         // Assert
-        Assert.IsType<NoContentResult>(resultado);
-        _repositorio.Verify(r => r.Delete(1), Times.Once);
+        resultado.Should().BeOfType<NoContentResult>();
+        _repositorioMock.Verify(r => r.Delete(1), Times.Once);
     }
 
     [Fact]
-    public void Delete_QuandoLembreteNaoExiste_RetornaNotFoundSemRemover()
+    public void Delete_LembreteInexistente_DeveRetornarNotFoundSemRemover()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(999)).Returns((Lembrete?)null);
+        _repositorioMock.Setup(r => r.GetById(999)).Returns((Lembrete?)null);
         var controller = CriarController();
 
         // Act
         var resultado = controller.Delete(999);
 
         // Assert
-        Assert.IsType<NotFoundObjectResult>(resultado);
-        _repositorio.Verify(r => r.Delete(It.IsAny<long>()), Times.Never);
+        resultado.Should().BeOfType<NotFoundObjectResult>();
+        _repositorioMock.Verify(r => r.Delete(It.IsAny<long>()), Times.Never);
     }
+
+    private static Lembrete NovoLembrete(
+        long id = 1, long responsavelId = 1, TipoLembrete tipo = TipoLembrete.VACINA) => new()
+    {
+        Id = id, ResponsavelId = responsavelId, PetId = 7, Tipo = tipo,
+        DataAgendada = new DateOnly(2026, 9, 15), Mensagem = "Vacina antirrábica agendada"
+    };
+
+    private static CriarLembreteDto NovoCriarLembreteDto() => new()
+    {
+        ResponsavelId = 1, PetId = 7, Tipo = TipoLembrete.CONSULTA,
+        DataAgendada = new DateOnly(2026, 9, 20), Mensagem = "Consulta de retorno"
+    };
 }

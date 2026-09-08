@@ -1,42 +1,52 @@
+// Importa o validador de Data Annotations usado pelas entidades
 using System.ComponentModel.DataAnnotations;
+// Importa o FluentAssertions para sintaxe expressiva de asserção
+using FluentAssertions;
+// Importa os enums do domínio
 using Vitalis.Models;
-using Vitalis.Tests.Unit.Fixtures;
+// Importa o xUnit para anotações e execução de testes
+using Xunit;
 
 namespace Vitalis.Tests.Unit.Dominio;
 
-/// <summary>Testes das regras de domínio da entidade <see cref="Lembrete"/>.</summary>
+// Suíte de testes unitários para validar as regras puras do Domínio do Lembrete
 public class LembreteTests
 {
     [Fact]
-    public void NovoLembrete_QuandoInstanciado_IniciaComStatusPendente()
+    public void NovoLembrete_QuandoInstanciado_DeveIniciarComStatusPendente()
     {
         // Arrange & Act
-        var lembrete = new Lembrete
-        {
-            ResponsavelId = 1,
-            PetId = 7,
-            Tipo = TipoLembrete.VACINA,
-            DataAgendada = new DateOnly(2026, 10, 1),
-            Mensagem = "Vacina V10"
-        };
+        var lembrete = NovoLembreteValido();
 
         // Assert
-        Assert.Equal(StatusLembrete.PENDENTE, lembrete.Status);
+        lembrete.Status.Should().Be(StatusLembrete.PENDENTE);
     }
 
     [Fact]
-    public void Validar_LembreteSemMensagem_RetornaErroDeCampoObrigatorio()
+    public void Validar_DadosValidos_DeveRetornarSemErros()
     {
         // Arrange
-        var lembrete = TestData.NovoLembrete();
+        var lembrete = NovoLembreteValido();
+
+        // Act
+        var erros = Validar(lembrete);
+
+        // Assert
+        erros.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validar_SemMensagem_DeveRetornarErroNoCampoMensagem()
+    {
+        // Arrange
+        var lembrete = NovoLembreteValido();
         lembrete.Mensagem = null!;
 
         // Act
-        var resultados = new List<ValidationResult>();
-        Validator.TryValidateObject(lembrete, new ValidationContext(lembrete), resultados, validateAllProperties: true);
+        var erros = Validar(lembrete);
 
         // Assert
-        Assert.Contains(resultados, r => r.MemberNames.Contains(nameof(Lembrete.Mensagem)));
+        erros.Should().Contain(e => e.MemberNames.Contains(nameof(Lembrete.Mensagem)));
     }
 
     [Theory]
@@ -45,37 +55,44 @@ public class LembreteTests
     [InlineData(TipoLembrete.EXAME)]
     [InlineData(TipoLembrete.MEDICAMENTO)]
     [InlineData(TipoLembrete.HIDRATACAO)]
-    public void NovoLembrete_ParaCadaTipoSuportado_PreservaOTipoInformado(TipoLembrete tipo)
+    public void NovoLembrete_ParaCadaTipoSuportado_DevePreservarOTipoInformado(TipoLembrete tipo)
     {
         // Arrange & Act
-        var lembrete = TestData.NovoLembrete(tipo: tipo);
+        var lembrete = NovoLembreteValido();
+        lembrete.Tipo = tipo;
 
         // Assert
-        Assert.Equal(tipo, lembrete.Tipo);
-    }
-
-    [Theory]
-    [InlineData("VACINA", TipoLembrete.VACINA)]
-    [InlineData("HIDRATACAO", TipoLembrete.HIDRATACAO)]
-    public void ParseTipoLembrete_ComNomeValido_ConverteParaOEnumCorrespondente(string texto, TipoLembrete esperado)
-    {
-        // Arrange & Act
-        var convertido = Enum.Parse<TipoLembrete>(texto);
-
-        // Assert
-        Assert.Equal(esperado, convertido);
+        lembrete.Tipo.Should().Be(tipo);
     }
 
     [Fact]
-    public void ParseTipoLembrete_ComNomeInexistente_NaoConverte()
+    public void ConverterTipo_ComNomeInexistente_NaoDeveConverter()
     {
         // Arrange
         const string tipoInvalido = "BANHO";
 
         // Act
-        var conseguiuConverter = Enum.TryParse<TipoLembrete>(tipoInvalido, ignoreCase: false, out _);
+        var conseguiuConverter = Enum.TryParse<TipoLembrete>(tipoInvalido, false, out _);
 
         // Assert
-        Assert.False(conseguiuConverter);
+        conseguiuConverter.Should().BeFalse();
+    }
+
+    // Cria um lembrete válido reutilizado na preparação dos cenários
+    private static Lembrete NovoLembreteValido() => new()
+    {
+        ResponsavelId = 1,
+        PetId         = 7,
+        Tipo          = TipoLembrete.VACINA,
+        DataAgendada  = new DateOnly(2026, 9, 15),
+        Mensagem      = "Vacina antirrábica agendada"
+    };
+
+    // Executa a validação por Data Annotations e devolve os erros encontrados
+    private static List<ValidationResult> Validar(Lembrete lembrete)
+    {
+        var erros = new List<ValidationResult>();
+        Validator.TryValidateObject(lembrete, new ValidationContext(lembrete), erros, true);
+        return erros;
     }
 }

@@ -1,112 +1,133 @@
+// Importa os tipos de resultado do ASP.NET Core MVC
 using Microsoft.AspNetCore.Mvc;
+// Importa o logger usado pelo controller
+using Microsoft.Extensions.Logging;
+// Importa o FluentAssertions para sintaxe expressiva de asserção
+using FluentAssertions;
+// Importa o Moq para simulação das dependências
 using Moq;
 using Vitalis.Repositories;
 using Vitalis.Tests.Unit.Fixtures;
+using Xunit;
 
 namespace Vitalis.Tests.Unit.Aplicacao;
 
-/// <summary>Testes unitários da camada de aplicação de contatos do responsável.</summary>
+// Suíte de testes unitários com Mock de repositório para a camada de aplicação dos Contatos
 public class ResponsavelContatoControllerTests
 {
-    private readonly Mock<IResponsavelContatoRepository> _repositorio = new(MockBehavior.Strict);
+    private readonly Mock<IResponsavelContatoRepository> _repositorioMock;
 
+    public ResponsavelContatoControllerTests()
+    {
+        // Instancia o Mock da interface IResponsavelContatoRepository
+        _repositorioMock = new Mock<IResponsavelContatoRepository>();
+    }
+
+    // Injeta a instância simulada no controller testado
     private ResponsavelContatoController CriarController()
-        => ApiConfigurationFixture.ComHttpContext(new ResponsavelContatoController(_repositorio.Object));
+        => ConfiguracaoFixture.ComHttpContext(
+            new ResponsavelContatoController(
+                _repositorioMock.Object,
+                new Mock<ILogger<ResponsavelContatoController>>().Object));
 
     [Fact]
-    public void GetAll_QuandoOResponsavelPossuiContatos_RetornaOkComALista()
+    public void GetAll_ResponsavelComContatos_DeveRetornarOkComALista()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetByResponsavelId(1))
-            .Returns([TestData.NovoContato(id: 1, responsavelId: 1, principal: true)]);
+        _repositorioMock.Setup(r => r.GetByResponsavelId(1))
+            .Returns([NovoContato(id: 1, responsavelId: 1, principal: true)]);
         var controller = CriarController();
 
         // Act
         var resultado = controller.GetAll(1);
 
         // Assert
-        var ok = Assert.IsType<OkObjectResult>(resultado);
-        Assert.Single(Assert.IsAssignableFrom<IEnumerable<ResponsavelContato>>(ok.Value));
+        var ok = resultado.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<ResponsavelContato>>().Which.Should().HaveCount(1);
     }
 
     [Fact]
-    public void GetById_QuandoOContatoNaoExiste_RetornaNotFound()
+    public void GetById_ContatoInexistente_DeveRetornarNotFound()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(999)).Returns((ResponsavelContato?)null);
+        _repositorioMock.Setup(r => r.GetById(999)).Returns((ResponsavelContato?)null);
         var controller = CriarController();
 
         // Act
         var resultado = controller.GetById(1, 999);
 
         // Assert
-        Assert.IsType<NotFoundObjectResult>(resultado);
+        resultado.Should().BeOfType<NotFoundObjectResult>();
     }
 
     [Fact]
-    public void Add_ComContatoValido_AssociaAoResponsavelERetornaCreated()
+    public void Add_ContatoValido_DeveAssociarAoResponsavelERetornarCreated()
     {
         // Arrange
-        var contato = TestData.NovoContato(id: 0, responsavelId: 0);
-        _repositorio.Setup(r => r.Add(contato)).Callback<ResponsavelContato>(c => c.Id = 3);
+        var contato = NovoContato(id: 0, responsavelId: 0);
+        _repositorioMock.Setup(r => r.Add(contato)).Callback<ResponsavelContato>(c => c.Id = 3);
         var controller = CriarController();
 
         // Act
         var resultado = controller.Add(responsavelId: 8, contato);
 
         // Assert
-        Assert.IsType<CreatedAtActionResult>(resultado);
-        Assert.Equal(8, contato.ResponsavelId);
-        _repositorio.Verify(r => r.Add(contato), Times.Once);
+        resultado.Should().BeOfType<CreatedAtActionResult>();
+        contato.ResponsavelId.Should().Be(8);
+        _repositorioMock.Verify(r => r.Add(contato), Times.Once);
     }
 
     [Fact]
-    public void Update_QuandoOContatoExiste_PreservaOsIdentificadoresERetornaNoContent()
+    public void Update_ContatoExistente_DevePreservarOsIdentificadoresERetornarNoContent()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(4)).Returns(TestData.NovoContato(id: 4, responsavelId: 2));
-        _repositorio.Setup(r => r.Update(It.IsAny<ResponsavelContato>()));
+        _repositorioMock.Setup(r => r.GetById(4)).Returns(NovoContato(id: 4, responsavelId: 2));
         var controller = CriarController();
-        var atualizado = TestData.NovoContato(id: 0, responsavelId: 0, telefone: "11912345678");
+        var atualizado = NovoContato(id: 0, responsavelId: 0, telefone: "11912345678");
 
         // Act
         var resultado = controller.Update(responsavelid: 2, id: 4, atualizado);
 
         // Assert
-        Assert.IsType<NoContentResult>(resultado);
-        Assert.Equal(4, atualizado.Id);
-        Assert.Equal(2, atualizado.ResponsavelId);
+        resultado.Should().BeOfType<NoContentResult>();
+        atualizado.Id.Should().Be(4);
+        atualizado.ResponsavelId.Should().Be(2);
     }
 
     [Fact]
-    public void Delete_QuandoOContatoPertenceAoResponsavel_RemoveERetornaNoContent()
+    public void Delete_ContatoDoProprioResponsavel_DeveRemoverERetornarNoContent()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(4)).Returns(TestData.NovoContato(id: 4, responsavelId: 2));
-        _repositorio.Setup(r => r.Delete(4));
+        _repositorioMock.Setup(r => r.GetById(4)).Returns(NovoContato(id: 4, responsavelId: 2));
         var controller = CriarController();
 
         // Act
         var resultado = controller.Delete(2, 4);
 
         // Assert
-        Assert.IsType<NoContentResult>(resultado);
-        _repositorio.Verify(r => r.Delete(4), Times.Once);
+        resultado.Should().BeOfType<NoContentResult>();
+        _repositorioMock.Verify(r => r.Delete(4), Times.Once);
     }
 
     [Fact]
-    public void SetPrincipal_QuandoOContatoPertenceAoResponsavel_DelegaParaORepositorio()
+    public void SetPrincipal_ContatoDoProprioResponsavel_DeveDelegarParaORepositorio()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(4)).Returns(TestData.NovoContato(id: 4, responsavelId: 2));
-        _repositorio.Setup(r => r.SetPrincipal(2, 4));
+        _repositorioMock.Setup(r => r.GetById(4)).Returns(NovoContato(id: 4, responsavelId: 2));
         var controller = CriarController();
 
         // Act
         var resultado = controller.SetPrincipal(2, 4);
 
         // Assert
-        Assert.IsType<NoContentResult>(resultado);
-        _repositorio.Verify(r => r.SetPrincipal(2, 4), Times.Once);
+        resultado.Should().BeOfType<NoContentResult>();
+        _repositorioMock.Verify(r => r.SetPrincipal(2, 4), Times.Once);
     }
+
+    private static ResponsavelContato NovoContato(
+        long id = 1, long responsavelId = 1, bool principal = false, string telefone = "11999998888") => new()
+    {
+        Id = id, ResponsavelId = responsavelId, Tipo = "CELULAR",
+        Telefone = telefone, Principal = principal
+    };
 }

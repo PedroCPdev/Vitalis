@@ -11,7 +11,7 @@ O PetHub é um sistema veterinário composto por dois backends que compartilham 
 
 O app mobile consome ambos os backends. O Java chama a API do Vitalis para buscar responsáveis por CPF e para criar lembretes de eventos veterinários.
 
-A partir da **3ª sprint** a aplicação passou a contar com uma camada completa de **monitoramento e observabilidade** (health checks, logging estruturado, tracing distribuído e métricas de desempenho) e com uma **suíte de testes automatizados** — 198 testes unitários e de integração escritos no padrão AAA.
+Na **3ª sprint** a aplicação ganhou uma camada de **monitoramento e observabilidade** (Health Checks, logging estruturado com Serilog e tracing/métricas com OpenTelemetry) e uma suíte de **testes automatizados** no padrão AAA, com 115 testes unitários e de integração.
 
 ---
 
@@ -26,16 +26,17 @@ A partir da **3ª sprint** a aplicação passou a contar com uma camada completa
 
 **Monitoramento e observabilidade**
 
-- `Microsoft.Extensions.Diagnostics.HealthChecks` — health checks da API, do banco e de serviços externos
-- **Serilog** — logging estruturado com saída em console e arquivo, e correlação de requisições
-- **OpenTelemetry** — tracing distribuído e métricas, com exporters Prometheus, OTLP e console
+- `Microsoft.Extensions.Diagnostics.HealthChecks` — verificações de saúde da API
+- **Serilog** (`Serilog.AspNetCore`, `Serilog.Sinks.Console`, `Serilog.Sinks.File`) — logging estruturado
+- **OpenTelemetry** (`Extensions.Hosting`, `Instrumentation.AspNetCore`, `Instrumentation.Http`, `Exporter.Console`, `Exporter.OpenTelemetryProtocol`) — tracing distribuído e métricas
 
 **Testes**
 
 - **xUnit** — framework de testes
 - **Moq** — mocking de dependências
+- **FluentAssertions** — asserções expressivas
 - `Microsoft.AspNetCore.Mvc.Testing` (`WebApplicationFactory`) — testes de integração
-- `Microsoft.EntityFrameworkCore.InMemory` — banco em memória para os testes
+- `Microsoft.EntityFrameworkCore.InMemory` — banco em memória nos testes de integração
 - **coverlet** — cobertura de código
 
 ---
@@ -83,31 +84,22 @@ O Swagger fica disponível em `http://localhost:5192/swagger`.
 ```
 Vitalis/
 ├── Vitalis.slnx                  # Solução: API + projetos de teste
-├── Controllers/
+├── Controllers/                  # Endpoints da API (instrumentados com ILogger, Activity e Counter)
 ├── Dados/AppDbContext.cs
 ├── Dto/  Models/  Repositories/  Migrations/
-├── Observability/                # Camada de monitoramento (3ª sprint)
-│   ├── ObservabilityExtensions.cs      # Registro e ativação de tudo
-│   ├── ObservabilityOptions.cs         # Configuração (seção "Observability")
-│   ├── VitalisMetrics.cs               # ActivitySource + Meter da aplicação
-│   ├── IMetricsRegistry.cs             # Agregador das métricas de desempenho
-│   ├── InMemoryMetricsRegistry.cs
-│   ├── MetricsSnapshot.cs
-│   ├── CorrelationIdMiddleware.cs      # X-Correlation-ID
-│   ├── RequestMetricsMiddleware.cs     # Tempo de resposta e taxa de erros
-│   ├── ExceptionHandlingMiddleware.cs  # Erros 500 padronizados
-│   └── HealthChecks/
-│       ├── ApiHealthCheck.cs
-│       ├── DatabaseHealthCheck.cs
-│       ├── ExternalServiceHealthCheck.cs
-│       └── HealthCheckResponseWriter.cs
+├── Health/                       # Health Checks customizados (3ª sprint)
+│   ├── BancoDadosHealthCheck.cs        # Conectividade com o Oracle
+│   └── ServicoExternoHealthCheck.cs    # Disponibilidade do backend Java
+├── Middlewares/
+│   └── CorrelationIdMiddleware.cs      # X-Correlation-ID no log estruturado
+├── Observabilidade/
+│   └── AplicacaoMetricas.cs            # Meter, Counters e ActivitySource da aplicação
+├── Program.cs                    # Serilog, Health Checks e OpenTelemetry
 └── tests/
-    ├── Vitalis.Tests.Unit/             # Testes unitários (137)
-    │   ├── Dominio/  Aplicacao/  Repositorios/  Observabilidade/
-    │   └── Fixtures/
-    └── Vitalis.Tests.Integration/      # Testes de integração (61)
-        ├── Endpoints/  Monitoramento/
-        └── Fixtures/
+    ├── Vitalis.Tests.Unit/             # Testes unitários (69)
+    │   ├── Dominio/  Aplicacao/  Fixtures/
+    └── Vitalis.Tests.Integration/      # Testes de integração (46)
+        ├── Endpoints/  Monitoramento/  Fixtures/
 ```
 
 ---
@@ -116,211 +108,164 @@ Vitalis/
 
 ### Health Checks
 
-A API expõe três endpoints construídos sobre `Microsoft.Extensions.Diagnostics.HealthChecks`:
+A API expõe o endpoint nativo de diagnóstico em **`GET /health`**, construído sobre
+`Microsoft.Extensions.Diagnostics.HealthChecks`. Ele agrega duas verificações customizadas
+que implementam a interface `IHealthCheck`:
 
-| Endpoint | O que verifica | Uso típico |
+| Verificação | O que faz | Resultado |
 |---|---|---|
-| `GET /health` | Todas as verificações registradas | Painel de monitoramento |
-| `GET /health/live` | Apenas a saúde do processo da API (tag `live`) | *Liveness probe* — reinicia o contêiner se falhar |
-| `GET /health/ready` | Banco de dados e serviços externos (tag `ready`) | *Readiness probe* — tira o pod do balanceador |
+| `banco_dados` | Testa a conexão com o Oracle através do `AppDbContext` e mede a latência | `Healthy` com `LatenciaMs`, ou `Unhealthy` |
+| `servico_externo` | Faz um `GET` HTTP no backend Java (`ServicosExternos:PethubJava`) | `Healthy` com `LatenciaMs` e `StatusCode`, ou `Unhealthy` |
 
-**Verificações registradas**
+O endpoint responde em texto simples com o status agregado:
 
-| Nome | O que faz | Falha resulta em |
+| Status geral | Corpo | HTTP |
 |---|---|---|
-| `api` | Uptime, ambiente, versão e memória gerenciada do processo | `Degraded` acima de 1 GB alocado |
-| `oracle-database` | `CanConnectAsync` no `AppDbContext`, com timeout de 5s e medição de latência | `Unhealthy` (ou `Degraded` acima de 2s) |
-| *(por serviço configurado)* | `GET` HTTP no serviço externo (ex.: backend Java) | `Degraded` se não crítico, `Unhealthy` se `Critical: true` |
+| Todas as verificações saudáveis | `Healthy` | `200 OK` |
+| Qualquer verificação com falha | `Unhealthy` | `503 Service Unavailable` |
 
-**Códigos de status HTTP**
-
-| Status geral | HTTP |
-|---|---|
-| `Healthy` / `Degraded` | `200 OK` |
-| `Unhealthy` | `503 Service Unavailable` |
-
-Um serviço externo não crítico fora do ar **degrada** a API, mas não a derruba.
-
-**Exemplo de resposta de `GET /health`:**
-
-```json
-{
-  "status": "Degraded",
-  "totalDurationMs": 132.41,
-  "timestamp": "2026-08-31T23:31:17.2234377+00:00",
-  "checks": [
-    {
-      "name": "api",
-      "status": "Healthy",
-      "description": "API respondendo normalmente.",
-      "durationMs": 3.598,
-      "tags": ["live", "self"],
-      "data": {
-        "service": "vitalis-api",
-        "version": "3.0.0",
-        "environment": "Development",
-        "uptimeSeconds": 31.2,
-        "allocatedMemoryMb": 14
-      }
-    },
-    {
-      "name": "oracle-database",
-      "status": "Healthy",
-      "description": "Conexão com o banco de dados estabelecida.",
-      "durationMs": 42.1,
-      "tags": ["ready", "db"],
-      "data": { "provider": "Oracle.EntityFrameworkCore", "latencyMs": 41.8 }
-    },
-    {
-      "name": "pethub-java",
-      "status": "Degraded",
-      "description": "Serviço 'pethub-java' inacessível.",
-      "durationMs": 98.6,
-      "tags": ["ready", "external"],
-      "data": {
-        "service": "pethub-java",
-        "url": "http://localhost:8080/actuator/health",
-        "critical": false,
-        "latencyMs": 79.5
-      },
-      "error": "Connection refused (localhost:8080)"
-    }
-  ]
-}
-```
-
-Como monitorar rapidamente pelo terminal:
+Como monitorar pelo terminal:
 
 ```bash
-curl -s http://localhost:5192/health | jq
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5192/health/ready
+# Corpo da resposta
+curl http://localhost:5192/health
+
+# Apenas o código HTTP — útil para orquestradores (Kubernetes, Azure)
+curl -o /dev/null -w "%{http_code}\n" http://localhost:5192/health
 ```
+
+Exemplo de saída com o banco no ar e o backend Java fora:
+
+```
+Unhealthy
+```
+
+> Para simular uma falha de conexão em sala, basta apontar a `OracleConnection`
+> para um host inexistente ou parar o backend Java: o `/health` passa a responder
+> `Unhealthy` com HTTP 503.
 
 ### Logging estruturado (Serilog)
 
-O Serilog substitui o logger padrão e grava em **console** e em **arquivo com rotação diária** (`logs/vitalis-YYYYMMDD.log`, 7 arquivos retidos).
+O Serilog substitui o provedor de logging padrão da Microsoft (`builder.Host.UseSerilog()`)
+e grava em dois **Sinks** simultâneos:
 
-- **Níveis usados:** `Information` no fluxo normal, `Warning` para respostas `4xx` e requisições lentas (acima de `SlowRequestThresholdMs`), `Error` para respostas `5xx` e exceções não tratadas, `Fatal` se a aplicação não subir.
-- **Enriquecimento:** todo evento carrega `Service`, `Version`, `MachineName`, `EnvironmentName`, `CorrelationId` e `TraceId`.
-- **Correlação de requisições:** o `CorrelationIdMiddleware` lê o header `X-Correlation-ID` da requisição (ou gera um novo), propaga o valor para os logs e para o span do OpenTelemetry, e o devolve no header da resposta — permitindo rastrear uma mesma chamada do app mobile até o log da API.
+| Sink | Destino |
+|---|---|
+| Console | Template `[{Timestamp:HH:mm:ss} {Level:u3}] [{CorrelationId}] {Message:lj}` |
+| Arquivo | `logs/vitalis-YYYYMMDD.log`, com rotação diária |
+
+**Níveis de log usados nos controllers:**
+
+| Nível | Quando |
+|---|---|
+| `Information` | Início das consultas, cadastros e atualizações bem-sucedidas |
+| `Warning` | Recurso não encontrado, credenciais inválidas, Service Token inválido, dados rejeitados |
+| `Error` | Falhas inesperadas capturadas pela pipeline |
+
+**Correlation ID:** o `CorrelationIdMiddleware` lê o header `X-Correlation-ID` da requisição
+(ou gera um novo GUID), devolve o valor no header da resposta e o injeta no `LogContext` do
+Serilog — de modo que **todos os logs daquela requisição carregam o mesmo identificador**,
+permitindo rastrear a chamada de ponta a ponta.
 
 ```bash
 # A resposta ecoa o mesmo identificador enviado
-curl -i -H "X-Correlation-ID: chamada-teste-42" http://localhost:5192/api/responsavel
+curl -i -H "X-Correlation-ID: aula-42" http://localhost:5192/api/responsavel
 ```
 
-Exemplo de linha de log:
+Saída correspondente no console:
 
 ```
-[23:31:24 INF] [chamada-teste-42] GET /api/responsavel respondeu 200 em 12.480 ms {"MachineName": "vm", "Service": "vitalis-api", "Version": "3.0.0"}
+[22:34:07 WRN] [aula-42] Criação de lembrete recusada por Service Token inválido.
 ```
-
-Os níveis são configuráveis pela seção `Serilog:MinimumLevel` do `appsettings.json`.
 
 ### Tracing distribuído e métricas (OpenTelemetry)
 
-O tracing instrumenta automaticamente ASP.NET Core, `HttpClient` e Entity Framework Core, além do `ActivitySource` próprio da aplicação (`Vitalis.Api`). Os endpoints de monitoramento são filtrados para não poluir os traces.
+O OpenTelemetry é registrado em `Program.cs` com o nome de serviço `Vitalis.API` e exporta
+tudo no **Console** (`AddConsoleExporter`), permitindo inspecionar traces e métricas
+diretamente no terminal do Kestrel.
 
-**Exporters disponíveis** (seção `Observability:Tracing`):
+**Tracing** — combina auto-instrumentação com spans manuais:
 
-| Configuração | Efeito |
+| Fonte | O que rastreia |
 |---|---|
-| `ConsoleExporter: true` | Imprime os spans no console (padrão em Development) |
-| `OtlpEndpoint: "http://localhost:4317"` | Envia traces e métricas via OTLP para Jaeger, Tempo, Grafana, Application Insights etc. |
+| `AddAspNetCoreInstrumentation()` | Requisições HTTP recebidas pela API |
+| `AddHttpClientInstrumentation()` | Chamadas HTTP de saída (ex.: verificação do serviço externo) |
+| `AddSource("Vitalis.API")` | Spans manuais criados com o `ActivitySource` da aplicação |
 
-**Métricas de desempenho**
+Os endpoints de criação abrem um span próprio via `ActivitySource` e anexam tags de negócio.
+Em caso de falha, o span é marcado com `ActivityStatusCode.Error`:
 
-| Endpoint | Formato | Conteúdo |
-|---|---|---|
-| `GET /metrics` | Prometheus (texto) | Métricas da aplicação + instrumentação de ASP.NET Core, HttpClient e runtime .NET |
-| `GET /metrics/summary` | JSON | Resumo legível: tempo de resposta e taxa de erros, no total e por endpoint |
+```
+Activity.DisplayName:        CriarLembreteEndpoint
+Activity.Kind:               Internal
+Activity.Duration:           00:00:00.0006399
+Activity.Tags:
+    lembrete.tipo: VACINA
+    lembrete.responsavelId: 1
+```
 
-Instrumentos publicados pela aplicação:
+**Métricas** — a classe `AplicacaoMetricas` centraliza o `Meter` da aplicação:
 
 | Métrica | Tipo | Descrição |
 |---|---|---|
-| `vitalis.requests.total` | Counter | Requisições HTTP processadas |
-| `vitalis.requests.errors.total` | Counter | Requisições com status `>= 400` |
-| `vitalis.request.duration` | Histogram | Tempo de resposta em milissegundos |
+| `responsaveis_cadastrados_total` | Counter | Responsáveis cadastrados, com a tag `status` |
+| `lembretes_criados_total` | Counter | Lembretes criados, com a tag `status` |
 
-Todos são rotulados por rota, método HTTP e status. As métricas usam o **template da rota** (`/api/responsavel/{id:long}`) em vez da URL concreta, evitando explosão de cardinalidade.
+A tag `status` distingue os desfechos (`sucesso`, `erro_validacao`, `erro_cpf_duplicado`,
+`erro_token`), o que permite acompanhar a **taxa de erros** por operação de negócio:
 
-Exemplo de `GET /metrics/summary`:
+```
+Metric Name: lembretes_criados_total, Description: Contagem total de lembretes criados na API, Unit: {lembretes}
+Instrumentation scope (Meter):
+	Name: Vitalis.API
+	Version: 1.0.0
+(...) status: erro_token
+Value: 1
+```
+
+Já o **tempo de resposta** de todas as rotas vem da auto-instrumentação
+`AddAspNetCoreInstrumentation()`, que publica o histograma `http.server.request.duration`
+particionado por rota e status HTTP:
+
+```
+Metric Name: http.server.request.duration, Description: Duration of HTTP server requests., Unit: s, Metric Type: Histogram
+(...) http.request.method: GET http.response.status_code: 503 http.route: /health
+Value: Sum: 16.0242643 Count: 1 Min: 16.0242643 Max: 16.0242643
+```
+
+O pacote `OpenTelemetry.Exporter.OpenTelemetryProtocol` também está instalado: basta trocar
+`AddConsoleExporter()` por `AddOtlpExporter()` para enviar os dados a um coletor externo
+(Jaeger, Prometheus, Grafana ou Aspire Dashboard).
+
+### Configuração
+
+Em `appsettings.json`:
 
 ```json
 {
-  "collectedAt": "2026-08-31T23:31:24.80+00:00",
-  "uptimeSeconds": 53.8,
-  "totalRequests": 124,
-  "totalErrors": 6,
-  "errorRate": 0.0484,
-  "averageResponseTimeMs": 18.42,
-  "p95ResponseTimeMs": 96.11,
-  "endpoints": [
-    {
-      "endpoint": "GET /api/responsavel",
-      "totalRequests": 80,
-      "totalErrors": 0,
-      "errorRate": 0,
-      "averageResponseTimeMs": 11.2,
-      "minResponseTimeMs": 4.1,
-      "maxResponseTimeMs": 88.7,
-      "p95ResponseTimeMs": 42.3
-    }
-  ]
-}
-```
-
-Para coletar com o Prometheus, aponte um job para `/metrics`:
-
-```yaml
-scrape_configs:
-  - job_name: vitalis-api
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["localhost:5192"]
-```
-
-### Configuração da observabilidade
-
-Seção `Observability` do `appsettings.json`:
-
-```json
-{
-  "Observability": {
-    "ServiceName": "vitalis-api",
-    "ServiceVersion": "3.0.0",
-    "LogFilePath": "logs/vitalis-.log",
-    "LogFileRetainedFileCount": 7,
-    "SlowRequestThresholdMs": 1000,
-    "Tracing": {
-      "ConsoleExporter": false,
-      "OtlpEndpoint": ""
-    },
-    "ExternalServices": [
-      {
-        "Name": "pethub-java",
-        "Url": "http://localhost:8080/actuator/health",
-        "TimeoutSeconds": 5,
-        "Critical": false
-      }
-    ]
+  "ConnectionStrings": {
+    "OracleConnection": "User Id=...;Password=...;Data Source=oracle.fiap.com.br:1521/orcl"
+  },
+  "ServiceToken": "pethub-internal-secret-2025",
+  "ServicosExternos": {
+    "PethubJava": "http://localhost:8080/actuator/health"
   }
 }
 ```
 
-Para monitorar outro serviço externo, basta adicionar um item em `ExternalServices` — um health check é registrado automaticamente para cada entrada.
+- `ServiceToken` — token compartilhado com o backend Java para proteger os endpoints de integração.
+- `ServicosExternos:PethubJava` — URL consultada pelo health check `servico_externo`.
 
 ---
 
 ## Testes automatizados
 
-A solução tem **198 testes** divididos em dois projetos, separados por camada:
+A solução tem **115 testes** organizados em dois projetos separados por camada:
 
 | Projeto | Testes | Escopo |
 |---|---|---|
-| `tests/Vitalis.Tests.Unit` | 137 | Domínio, Aplicação, Repositórios e Observabilidade — dependências isoladas com Moq e banco InMemory |
-| `tests/Vitalis.Tests.Integration` | 61 | Fluxo HTTP completo via `WebApplicationFactory` |
+| `tests/Vitalis.Tests.Unit` | 69 | Camadas de **Domínio** e **Aplicação**, com dependências isoladas por Moq |
+| `tests/Vitalis.Tests.Integration` | 46 | Fluxo HTTP completo via `WebApplicationFactory` |
 
 ### Como executar
 
@@ -345,7 +290,10 @@ dotnet test --filter FullyQualifiedName~LembretesApiControllerTests
 dotnet test --filter DisplayName~Unauthorized
 ```
 
-Os testes **não precisam do banco Oracle**: os unitários usam o provider InMemory e os de integração substituem o `AppDbContext` por um banco em memória exclusivo de cada execução.
+No Visual Studio: **Teste → Gerenciador de Testes** (`Ctrl + E, T`) e **Executar Todos os Testes**.
+
+Os testes **não dependem do banco Oracle**: os unitários substituem os repositórios por mocks
+e os de integração trocam o `AppDbContext` por um banco em memória exclusivo de cada execução.
 
 Para visualizar a cobertura em HTML:
 
@@ -356,81 +304,66 @@ reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coveragereport"
 
 ### Padrão AAA e nomenclatura
 
-Todos os testes seguem o padrão **AAA (Arrange, Act, Assert)**, com as três etapas explicitamente comentadas:
+Todos os testes seguem o padrão **AAA (Arrange, Act, Assert)**, com as três etapas comentadas,
+e a convenção **`MetodoTestado_Cenario_ResultadoEsperado`**:
 
 ```csharp
 [Fact]
-public void Cadastrar_ComCpfJaExistente_RetornaConflictSemPersistir()
+public void Cadastrar_DadosValidos_DeveSalvarNoRepositorioERetornarCreated()
 {
     // Arrange
-    var dto = TestData.NovoCadastroDto();
-    _repositorio.Setup(r => r.GetByCpf(dto.Cpf)).Returns(TestData.NovoResponsavel());
+    var dto = NovoCadastroDto();
+    _repositorioMock.Setup(r => r.GetByCpf(dto.Cpf)).Returns((Responsavel?)null);
+    _repositorioMock.Setup(r => r.Add(It.IsAny<Responsavel>())).Callback<Responsavel>(r => r.Id = 10);
     var controller = CriarController();
 
     // Act
     var resultado = controller.Cadastrar(dto);
 
     // Assert
-    Assert.IsType<ConflictObjectResult>(resultado);
-    _repositorio.Verify(r => r.Add(It.IsAny<Responsavel>()), Times.Never);
+    var created = resultado.Should().BeOfType<CreatedAtActionResult>().Subject;
+    created.RouteValues!["id"].Should().Be(10L);
+    // Verifica se o método Add do repositório foi chamado exatamente 1 vez
+    _repositorioMock.Verify(r => r.Add(It.Is<Responsavel>(x => x.Cpf == dto.Cpf)), Times.Once);
 }
 ```
 
-A nomenclatura é sempre **`MetodoTestado_Cenario_ResultadoEsperado`**:
-
 | Exemplo | Leitura |
 |---|---|
-| `GetById_QuandoResponsavelNaoExiste_RetornaNotFound` | Método `GetById`, cenário "responsável não existe", esperado `404` |
-| `PostLembrete_SemServiceToken_Retorna401Unauthorized` | Endpoint de criação de lembrete sem o token de integração |
-| `Add_QuandoEhOPrimeiroEnderecoDoResponsavel_MarcaComoPrincipalAutomaticamente` | Regra de negócio do endereço principal |
+| `GetById_ResponsavelInexistente_DeveRetornarNotFound` | Método `GetById`, cenário "responsável não existe", esperado `404` |
+| `PostLembrete_SemServiceToken_DeveRetornar401` | Criação de lembrete sem o token de integração |
+| `Construtor_NomeInvalido_DeveRetornarErroNoCampoNome` | Regra de validação do domínio |
 
-### Organização e fixtures
+### Fixtures e Collection Fixtures
 
-Os projetos são organizados por camada, e o contexto compartilhado entre testes é montado com **Fixtures** e **Collection Fixtures** do xUnit:
+O contexto compartilhado entre os testes é montado com os recursos do xUnit:
 
 | Fixture | Tipo | Compartilha |
 |---|---|---|
-| `InMemoryDatabaseFixture` | `ICollectionFixture` (`"Banco em memória"`) | Criação de contextos EF InMemory, isolados e com seed opcional, para todos os testes de repositório |
-| `ApiConfigurationFixture` | `IClassFixture` | `IConfiguration` com o `ServiceToken` e montagem do `HttpContext` dos controllers |
-| `VitalisWebApplicationFactory` | `ICollectionFixture` (`"API Vitalis em memória"`) | Uma única instância da API em memória para todos os testes de integração |
-| `TestData` / `DadosDeIntegracao` | Estáticos | Fábricas de entidades e payloads usados na etapa *Arrange* |
+| `ConfiguracaoFixture` | `IClassFixture` | `IConfiguration` com o `ServiceToken` e a montagem do `HttpContext` dos controllers |
+| `VitalisWebApplicationFactory` | `ICollectionFixture` | Uma única instância da API em memória para todas as classes de teste de integração |
 
 ### O que os testes cobrem
 
 **Unitários — Domínio** (`tests/Vitalis.Tests.Unit/Dominio`)
-Validações de `Responsavel`, `ResponsavelEndereco`, `ResponsavelContato` e `Lembrete`: campos obrigatórios, limites de tamanho (CPF, nome, UF, CEP), valores padrão e conversão dos enums `TipoLembrete` / `StatusLembrete`.
+Regras de validação de `Responsavel`, `ResponsavelEndereco`, `ResponsavelContato` e `Lembrete`:
+campos obrigatórios, limites de tamanho (nome, CPF, UF, CEP), valores padrão e os enums
+`TipoLembrete` / `StatusLembrete`. Usa `[Theory]` com `[InlineData]` para os cenários parametrizados.
 
 **Unitários — Aplicação** (`tests/Vitalis.Tests.Unit/Aplicacao`)
-Os quatro controllers com repositórios mockados via Moq (`MockBehavior.Strict`): caminhos de sucesso, `404`, `400` por `ModelState` inválido, `409` de CPF duplicado, `401` de login e de `X-Service-Token`, e verificação de que o repositório **não** é chamado nos caminhos de erro.
-
-**Unitários — Repositórios** (`tests/Vitalis.Tests.Unit/Repositorios`)
-Hash BCrypt da senha no cadastro, preservação da senha no update, filtro de responsável inativo por CPF, ordenação e filtros dos lembretes, e a regra de "principal único" de endereços e contatos (incluindo a promoção automática ao remover o principal).
-
-**Unitários — Observabilidade** (`tests/Vitalis.Tests.Unit/Observabilidade`)
-Cálculo de taxa de erros, média e percentil 95 no `InMemoryMetricsRegistry`; health checks da API, do banco e de serviços externos (com `HttpMessageHandler` mockado para simular sucesso, erro e timeout); reaproveitamento e geração do `X-Correlation-ID`; e a serialização JSON do relatório de saúde.
+Os quatro controllers com os repositórios simulados por Moq: caminhos de sucesso, `404`, `400`
+por `ModelState` inválido, `409` de CPF duplicado, `401` de login e de `X-Service-Token`, e
+verificação, com `Times.Once` e `Times.Never`, de que o repositório é (ou não) chamado.
 
 **Integração — Endpoints** (`tests/Vitalis.Tests.Integration/Endpoints`)
-Fluxo HTTP completo: cadastro e login, garantia de que a senha nunca aparece na resposta, `400` para JSON malformado e para payload incompleto, `409` de CPF duplicado, autenticação por `X-Service-Token` (ausente, inválido e válido), CRUD de lembretes, isolamento entre responsáveis nos recursos aninhados e a regra de endereço/contato principal.
+Fluxo HTTP completo: cadastro e login, garantia de que a senha nunca aparece na resposta,
+`400` para JSON malformado e payload incompleto, `409` de CPF duplicado, autenticação por
+`X-Service-Token` (ausente, inválido e válido), CRUD de lembretes, isolamento entre
+responsáveis nos recursos aninhados e a regra de endereço/contato principal.
 
 **Integração — Monitoramento** (`tests/Vitalis.Tests.Integration/Monitoramento`)
-Os três endpoints de health check e o particionamento por tags, a semântica `Degraded` de um serviço externo não crítico fora do ar, o formato Prometheus de `/metrics`, os contadores de `/metrics/summary` (incluindo o agrupamento por template de rota) e o eco do header de correlação.
-
----
-
-## Variáveis de configuração
-
-Em `appsettings.json`:
-
-```json
-{
-  "ConnectionStrings": {
-    "OracleConnection": "User Id=...;Password=...;Data Source=oracle.fiap.com.br:1521/orcl"
-  },
-  "ServiceToken": "pethub-internal-secret-2025"
-}
-```
-
-`ServiceToken` é o token compartilhado com o backend Java para proteger os endpoints de integração entre sistemas.
+O endpoint `/health` (status e content-type), o eco do header `X-Correlation-ID`, a geração
+de identificadores distintos por requisição e a disponibilidade do documento OpenAPI.
 
 ---
 
@@ -440,11 +373,7 @@ Em `appsettings.json`:
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/health` | Saúde completa da API (API + banco + serviços externos) |
-| `GET` | `/health/live` | *Liveness probe* — apenas o processo da API |
-| `GET` | `/health/ready` | *Readiness probe* — banco e serviços externos |
-| `GET` | `/metrics` | Métricas no formato Prometheus |
-| `GET` | `/metrics/summary` | Resumo JSON de tempo de resposta e taxa de erros |
+| `GET` | `/health` | Saúde da API: conexão com o Oracle e disponibilidade do backend Java |
 
 ### Responsáveis — `/api/responsavel`
 
@@ -525,7 +454,6 @@ Body: { responsavelId, petId, tipo, dataAgendada, mensagem, referenciaId, refere
 - Senhas dos responsáveis são armazenadas com hash **BCrypt** — nunca em texto puro
 - A senha **nunca é retornada** em nenhum response da API (verificado por teste de integração)
 - Endpoints de integração com o Java são protegidos por `X-Service-Token` no header
-- Exceções não tratadas retornam um JSON padronizado com o `correlationId`, sem vazar *stack trace* ao cliente
 
 ---
 

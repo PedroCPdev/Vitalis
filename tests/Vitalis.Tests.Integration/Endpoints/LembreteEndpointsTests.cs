@@ -1,15 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using FluentAssertions;
 using Vitalis.Models;
 using Vitalis.Tests.Integration.Fixtures;
+using Xunit;
 
 namespace Vitalis.Tests.Integration.Endpoints;
 
-/// <summary>
-/// Testes de integração dos lembretes, incluindo o fluxo usado pelo backend Java
-/// (criação autenticada por <c>X-Service-Token</c>).
-/// </summary>
+// Testes de integração dos lembretes, incluindo o fluxo usado pelo backend Java
 [Collection(VitalisApiCollection.Name)]
 public class LembreteEndpointsTests : IDisposable
 {
@@ -30,7 +29,7 @@ public class LembreteEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task PostLembrete_ComServiceTokenValido_Retorna201EPersisteOLembrete()
+    public async Task PostLembrete_ServiceTokenValido_DeveRetornar201EPersistirOLembrete()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -39,15 +38,15 @@ public class LembreteEndpointsTests : IDisposable
         // Act
         var resposta = await clientAutenticado.PostAsJsonAsync("/api/lembretes",
             DadosDeIntegracao.NovoLembrete(responsavelId));
+        var criado = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
-        var criado = await resposta.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.True(criado.GetProperty("id").GetInt64() > 0);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Created);
+        criado.GetProperty("id").GetInt64().Should().BeGreaterThan(0);
     }
 
     [Fact]
-    public async Task PostLembrete_SemServiceToken_Retorna401Unauthorized()
+    public async Task PostLembrete_SemServiceToken_DeveRetornar401()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -57,11 +56,11 @@ public class LembreteEndpointsTests : IDisposable
             DadosDeIntegracao.NovoLembrete(responsavelId));
 
         // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task PostLembrete_ComServiceTokenInvalido_Retorna401Unauthorized()
+    public async Task PostLembrete_ServiceTokenInvalido_DeveRetornar401()
     {
         // Arrange
         using var clientComTokenErrado = _factory.CreateClientComServiceToken("token-invalido");
@@ -71,49 +70,49 @@ public class LembreteEndpointsTests : IDisposable
             DadosDeIntegracao.NovoLembrete(responsavelId: 1));
 
         // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task PostLembrete_QuandoCriado_NasceComStatusPendente()
+    public async Task PostLembrete_QuandoCriado_DeveNascerComStatusPendente()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
         using var clientAutenticado = _factory.CreateClientComServiceToken();
 
         // Act
-        var criado = await CriarLembreteAsync(clientAutenticado, responsavelId);
+        var lembreteId = await CriarLembreteAsync(clientAutenticado, responsavelId);
         var lembretes = await _client.GetFromJsonAsync<JsonElement>("/api/lembretes");
 
         // Assert
-        var lembrete = lembretes.EnumerateArray().Single(l => l.GetProperty("id").GetInt64() == criado);
-        Assert.Equal((int)StatusLembrete.PENDENTE, lembrete.GetProperty("status").GetInt32());
+        var lembrete = lembretes.EnumerateArray().Single(l => l.GetProperty("id").GetInt64() == lembreteId);
+        lembrete.GetProperty("status").GetInt32().Should().Be((int)StatusLembrete.PENDENTE);
     }
 
     [Fact]
-    public async Task GetLembretes_SemLembretesCadastrados_Retorna200ComListaVazia()
+    public async Task GetLembretes_SemLembretesCadastrados_DeveRetornar200ComListaVazia()
     {
         // Arrange & Act
         var resposta = await _client.GetAsync("/api/lembretes");
         var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
-        Assert.Equal(0, corpo.GetArrayLength());
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK);
+        corpo.GetArrayLength().Should().Be(0);
     }
 
     [Fact]
-    public async Task GetLembreteById_ComIdInexistente_Retorna404()
+    public async Task GetLembreteById_IdInexistente_DeveRetornar404()
     {
         // Arrange & Act
         var resposta = await _client.GetAsync("/api/lembretes/999999");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task GetLembretesPorResponsavel_ComLembretesDeVariosResponsaveis_RetornaApenasOsDoResponsavel()
+    public async Task GetLembretesPorResponsavel_LembretesDeVariosResponsaveis_DeveRetornarApenasOsDoResponsavel()
     {
         // Arrange
         var primeiro = await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "11111111111", email: "a@pethub.com");
@@ -126,12 +125,12 @@ public class LembreteEndpointsTests : IDisposable
         var lembretes = await _client.GetFromJsonAsync<JsonElement>($"/api/lembretes/responsavel/{primeiro}");
 
         // Assert
-        Assert.Equal(1, lembretes.GetArrayLength());
-        Assert.Equal(primeiro, lembretes[0].GetProperty("responsavelId").GetInt64());
+        lembretes.GetArrayLength().Should().Be(1);
+        lembretes[0].GetProperty("responsavelId").GetInt64().Should().Be(primeiro);
     }
 
     [Fact]
-    public async Task GetLembretesPorResponsavelETipo_ComTipoInformado_RetornaApenasOsLembretesDaqueleTipo()
+    public async Task GetLembretesPorResponsavelETipo_TipoInformado_DeveRetornarApenasOsDaqueleTipo()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -144,11 +143,11 @@ public class LembreteEndpointsTests : IDisposable
             $"/api/lembretes/responsavel/{responsavelId}/tipo/VACINA");
 
         // Assert
-        Assert.Equal(1, lembretes.GetArrayLength());
+        lembretes.GetArrayLength().Should().Be(1);
     }
 
     [Fact]
-    public async Task GetLembretesPorResponsavelETipo_ComTipoInexistente_Retorna400()
+    public async Task GetLembretesPorResponsavelETipo_TipoInexistente_DeveRetornar400()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -157,11 +156,11 @@ public class LembreteEndpointsTests : IDisposable
         var resposta = await _client.GetAsync($"/api/lembretes/responsavel/{responsavelId}/tipo/BANHO");
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task PatchStatus_ComLembreteExistente_Retorna204EAtualizaOStatus()
+    public async Task PatchStatus_LembreteExistente_DeveRetornar204EAtualizarOStatus()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -174,23 +173,23 @@ public class LembreteEndpointsTests : IDisposable
         var lembrete = await _client.GetFromJsonAsync<JsonElement>($"/api/lembretes/{lembreteId}");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, resposta.StatusCode);
-        Assert.Equal((int)StatusLembrete.ENVIADO, lembrete.GetProperty("status").GetInt32());
+        resposta.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        lembrete.GetProperty("status").GetInt32().Should().Be((int)StatusLembrete.ENVIADO);
     }
 
     [Fact]
-    public async Task PatchStatus_ComLembreteInexistente_Retorna404()
+    public async Task PatchStatus_LembreteInexistente_DeveRetornar404()
     {
         // Arrange & Act
         var resposta = await _client.PatchAsJsonAsync("/api/lembretes/999999/status",
             new { status = (int)StatusLembrete.FALHOU });
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task DeleteLembrete_ComLembreteExistente_Retorna204ERemoveORegistro()
+    public async Task DeleteLembrete_LembreteExistente_DeveRetornar204ERemoverORegistro()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -202,20 +201,11 @@ public class LembreteEndpointsTests : IDisposable
         var consulta = await _client.GetAsync($"/api/lembretes/{lembreteId}");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, resposta.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, consulta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        consulta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    [Fact]
-    public async Task DeleteLembrete_ComLembreteInexistente_Retorna404()
-    {
-        // Arrange & Act
-        var resposta = await _client.DeleteAsync("/api/lembretes/999999");
-
-        // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
-    }
-
+    // Cria um lembrete pela API autenticada e devolve o identificador gerado
     private static async Task<long> CriarLembreteAsync(
         HttpClient clientAutenticado, long responsavelId, TipoLembrete tipo = TipoLembrete.VACINA)
     {

@@ -1,24 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using FluentAssertions;
 using Vitalis.Tests.Integration.Fixtures;
+using Xunit;
 
 namespace Vitalis.Tests.Integration.Endpoints;
 
-/// <summary>
-/// Testes de integração dos recursos aninhados de endereço e contato, incluindo a regra
-/// de "principal único" e o isolamento entre responsáveis diferentes.
-/// </summary>
+// Testes de integração dos recursos aninhados de endereço e contato
 [Collection(VitalisApiCollection.Name)]
 public class EnderecoContatoEndpointsTests : IDisposable
 {
-    private readonly VitalisWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public EnderecoContatoEndpointsTests(VitalisWebApplicationFactory factory)
     {
-        _factory = factory;
-        _factory.LimparBanco();
+        factory.LimparBanco();
         _client = factory.CreateClient();
     }
 
@@ -29,7 +26,7 @@ public class EnderecoContatoEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task PostEndereco_ComDadosValidos_Retorna201EMarcaOPrimeiroComoPrincipal()
+    public async Task PostEndereco_DadosValidos_DeveRetornar201EMarcarOPrimeiroComoPrincipal()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -40,12 +37,12 @@ public class EnderecoContatoEndpointsTests : IDisposable
         var criado = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
-        Assert.True(criado.GetProperty("principal").GetBoolean());
+        resposta.StatusCode.Should().Be(HttpStatusCode.Created);
+        criado.GetProperty("principal").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
-    public async Task PostEndereco_SemOsCamposObrigatorios_Retorna400()
+    public async Task PostEndereco_PayloadIncompleto_DeveRetornar400()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -56,26 +53,26 @@ public class EnderecoContatoEndpointsTests : IDisposable
             $"/api/responsavel/{responsavelId}/enderecos", enderecoIncompleto);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task GetEnderecos_AposCadastrarDois_Retorna200ComOsDoisEnderecos()
+    public async Task GetEnderecos_AposCadastrarDois_DeveRetornar200ComOsDoisEnderecos()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
-        await _client.PostAsJsonAsync($"/api/responsavel/{responsavelId}/enderecos", DadosDeIntegracao.NovoEndereco());
-        await _client.PostAsJsonAsync($"/api/responsavel/{responsavelId}/enderecos", DadosDeIntegracao.NovoEndereco());
+        await CriarEnderecoAsync(responsavelId);
+        await CriarEnderecoAsync(responsavelId);
 
         // Act
         var enderecos = await _client.GetFromJsonAsync<JsonElement>($"/api/responsavel/{responsavelId}/enderecos");
 
         // Assert
-        Assert.Equal(2, enderecos.GetArrayLength());
+        enderecos.GetArrayLength().Should().Be(2);
     }
 
     [Fact]
-    public async Task GetEnderecoById_QuandoPertenceAOutroResponsavel_Retorna404()
+    public async Task GetEnderecoById_EnderecoDeOutroResponsavel_DeveRetornar404()
     {
         // Arrange
         var dono = await DadosDeIntegracao.CadastrarResponsavelAsync(_client, cpf: "11111111111", email: "dono@pethub.com");
@@ -86,11 +83,11 @@ public class EnderecoContatoEndpointsTests : IDisposable
         var resposta = await _client.GetAsync($"/api/responsavel/{estranho}/enderecos/{enderecoId}");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task PatchEnderecoPrincipal_ComDoisEnderecos_TransfereAMarcacaoDePrincipal()
+    public async Task PatchEnderecoPrincipal_ComDoisEnderecos_DeveTransferirAMarcacaoDePrincipal()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -103,13 +100,13 @@ public class EnderecoContatoEndpointsTests : IDisposable
         var enderecos = await _client.GetFromJsonAsync<JsonElement>($"/api/responsavel/{responsavelId}/enderecos");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, resposta.StatusCode);
-        Assert.False(BuscarPorId(enderecos, primeiro).GetProperty("principal").GetBoolean());
-        Assert.True(BuscarPorId(enderecos, segundo).GetProperty("principal").GetBoolean());
+        resposta.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        BuscarPorId(enderecos, primeiro).GetProperty("principal").GetBoolean().Should().BeFalse();
+        BuscarPorId(enderecos, segundo).GetProperty("principal").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
-    public async Task DeleteEndereco_ComEnderecoExistente_Retorna204ERemoveORegistro()
+    public async Task DeleteEndereco_EnderecoExistente_DeveRetornar204ERemoverORegistro()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -120,12 +117,12 @@ public class EnderecoContatoEndpointsTests : IDisposable
         var consulta = await _client.GetAsync($"/api/responsavel/{responsavelId}/enderecos/{enderecoId}");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, resposta.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, consulta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        consulta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task PostContato_ComDadosValidos_Retorna201EMarcaOPrimeiroComoPrincipal()
+    public async Task PostContato_DadosValidos_DeveRetornar201EMarcarOPrimeiroComoPrincipal()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -136,12 +133,12 @@ public class EnderecoContatoEndpointsTests : IDisposable
         var criado = await resposta.Content.ReadFromJsonAsync<JsonElement>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
-        Assert.True(criado.GetProperty("principal").GetBoolean());
+        resposta.StatusCode.Should().Be(HttpStatusCode.Created);
+        criado.GetProperty("principal").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
-    public async Task PatchContatoPrincipal_ComDoisContatos_TransfereAMarcacaoDePrincipal()
+    public async Task PatchContatoPrincipal_ComDoisContatos_DeveTransferirAMarcacaoDePrincipal()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -154,13 +151,13 @@ public class EnderecoContatoEndpointsTests : IDisposable
         var contatos = await _client.GetFromJsonAsync<JsonElement>($"/api/responsavel/{responsavelId}/contatos");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, resposta.StatusCode);
-        Assert.False(BuscarPorId(contatos, primeiro).GetProperty("principal").GetBoolean());
-        Assert.True(BuscarPorId(contatos, segundo).GetProperty("principal").GetBoolean());
+        resposta.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        BuscarPorId(contatos, primeiro).GetProperty("principal").GetBoolean().Should().BeFalse();
+        BuscarPorId(contatos, segundo).GetProperty("principal").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
-    public async Task GetContatoById_ComIdInexistente_Retorna404()
+    public async Task GetContatoById_IdInexistente_DeveRetornar404()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -169,11 +166,11 @@ public class EnderecoContatoEndpointsTests : IDisposable
         var resposta = await _client.GetAsync($"/api/responsavel/{responsavelId}/contatos/999999");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
+        resposta.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task GetResponsavelById_ComEnderecoEContatoCadastrados_RetornaOsRelacionamentosAninhados()
+    public async Task GetResponsavelById_ComEnderecoEContato_DeveRetornarOsRelacionamentosAninhados()
     {
         // Arrange
         var responsavelId = await DadosDeIntegracao.CadastrarResponsavelAsync(_client);
@@ -184,8 +181,8 @@ public class EnderecoContatoEndpointsTests : IDisposable
         var responsavel = await _client.GetFromJsonAsync<JsonElement>($"/api/responsavel/{responsavelId}");
 
         // Assert
-        Assert.Equal(1, responsavel.GetProperty("enderecos").GetArrayLength());
-        Assert.Equal(1, responsavel.GetProperty("contatos").GetArrayLength());
+        responsavel.GetProperty("enderecos").GetArrayLength().Should().Be(1);
+        responsavel.GetProperty("contatos").GetArrayLength().Should().Be(1);
     }
 
     private async Task<long> CriarEnderecoAsync(long responsavelId)

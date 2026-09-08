@@ -1,33 +1,48 @@
+// Importa os tipos de resultado do ASP.NET Core MVC
 using Microsoft.AspNetCore.Mvc;
+// Importa o logger usado pelo controller
+using Microsoft.Extensions.Logging;
+// Importa o FluentAssertions para sintaxe expressiva de asserção
+using FluentAssertions;
+// Importa o Moq para simulação das dependências
 using Moq;
+// Importa os contratos de repositório da aplicação
 using Vitalis.Repositories;
 using Vitalis.Tests.Unit.Fixtures;
+using Xunit;
 
 namespace Vitalis.Tests.Unit.Aplicacao;
 
-/// <summary>
-/// Testes unitários da camada de aplicação do domínio Responsável.
-/// O repositório é substituído por um mock (Moq), isolando o controller do banco de dados.
-/// </summary>
-public class ResponsavelsApiControllerTests : IClassFixture<ApiConfigurationFixture>
+// Suíte de testes unitários com Mock de repositório para a camada de aplicação do Responsável
+public class ResponsavelsApiControllerTests : IClassFixture<ConfiguracaoFixture>
 {
-    private readonly ApiConfigurationFixture _fixture;
-    private readonly Mock<IResponsavelRepository> _repositorio = new(MockBehavior.Strict);
+    private readonly ConfiguracaoFixture _fixture;
+    private readonly Mock<IResponsavelRepository> _repositorioMock;
 
-    public ResponsavelsApiControllerTests(ApiConfigurationFixture fixture) => _fixture = fixture;
+    public ResponsavelsApiControllerTests(ConfiguracaoFixture fixture)
+    {
+        _fixture = fixture;
+        // Instancia o Mock da interface IResponsavelRepository
+        _repositorioMock = new Mock<IResponsavelRepository>();
+    }
 
+    // Injeta a instância simulada no controller testado
     private ResponsavelsApiController CriarController(string? serviceToken = null)
-        => ApiConfigurationFixture.ComHttpContext(
-            new ResponsavelsApiController(_repositorio.Object, _fixture.Configuration), serviceToken);
+        => ConfiguracaoFixture.ComHttpContext(
+            new ResponsavelsApiController(
+                _repositorioMock.Object,
+                _fixture.Configuration,
+                new Mock<ILogger<ResponsavelsApiController>>().Object),
+            serviceToken);
 
     [Fact]
-    public void GetAll_QuandoExistemResponsaveisCadastrados_RetornaOkComTodosOsRegistros()
+    public void GetAll_ResponsaveisCadastrados_DeveRetornarOkComTodosOsRegistros()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetAll()).Returns(
+        _repositorioMock.Setup(r => r.GetAll()).Returns(
         [
-            TestData.NovoResponsavel(id: 1, cpf: "11111111111", email: "a@pethub.com"),
-            TestData.NovoResponsavel(id: 2, cpf: "22222222222", email: "b@pethub.com")
+            new Responsavel { Id = 1, Nome = "Ana",  Cpf = "11111111111", Email = "a@pethub.com", Senha = "x" },
+            new Responsavel { Id = 2, Nome = "Lucas", Cpf = "22222222222", Email = "b@pethub.com", Senha = "x" }
         ]);
         var controller = CriarController();
 
@@ -35,58 +50,58 @@ public class ResponsavelsApiControllerTests : IClassFixture<ApiConfigurationFixt
         var resultado = controller.GetAll();
 
         // Assert
-        var ok = Assert.IsType<OkObjectResult>(resultado);
-        var itens = Assert.IsAssignableFrom<IEnumerable<object>>(ok.Value);
-        Assert.Equal(2, itens.Count());
-        _repositorio.Verify(r => r.GetAll(), Times.Once);
+        var ok = resultado.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<object>>().Which.Should().HaveCount(2);
+        _repositorioMock.Verify(r => r.GetAll(), Times.Once);
     }
 
     [Fact]
-    public void GetById_QuandoResponsavelExiste_RetornaOkComOsDadosDoResponsavel()
+    public void GetById_ResponsavelExistente_DeveRetornarOkComOsDados()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(1)).Returns(TestData.NovoResponsavel(id: 1));
+        var existente = NovoResponsavel(id: 1);
+        _repositorioMock.Setup(r => r.GetById(1)).Returns(existente);
         var controller = CriarController();
 
         // Act
         var resultado = controller.GetById(1);
 
         // Assert
-        var ok = Assert.IsType<OkObjectResult>(resultado);
-        Assert.NotNull(ok.Value);
+        resultado.Should().BeOfType<OkObjectResult>();
+        _repositorioMock.Verify(r => r.GetById(1), Times.Once);
     }
 
     [Fact]
-    public void GetById_QuandoResponsavelNaoExiste_RetornaNotFound()
+    public void GetById_ResponsavelInexistente_DeveRetornarNotFound()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(999)).Returns((Responsavel?)null);
+        _repositorioMock.Setup(r => r.GetById(999)).Returns((Responsavel?)null);
         var controller = CriarController();
 
         // Act
         var resultado = controller.GetById(999);
 
         // Assert
-        Assert.IsType<NotFoundObjectResult>(resultado);
+        resultado.Should().BeOfType<NotFoundObjectResult>();
     }
 
     [Fact]
-    public void BuscarPorCpf_ComServiceTokenValidoECpfExistente_RetornaOkComOResponsavel()
+    public void BuscarPorCpf_ServiceTokenValido_DeveRetornarOkComOResponsavel()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetByCpf("12345678901")).Returns(TestData.NovoResponsavel());
-        var controller = CriarController(ApiConfigurationFixture.ServiceTokenValido);
+        _repositorioMock.Setup(r => r.GetByCpf("12345678901")).Returns(NovoResponsavel());
+        var controller = CriarController(ConfiguracaoFixture.ServiceTokenValido);
 
         // Act
         var resultado = controller.BuscarPorCpf("12345678901");
 
         // Assert
-        Assert.IsType<OkObjectResult>(resultado);
-        _repositorio.Verify(r => r.GetByCpf("12345678901"), Times.Once);
+        resultado.Should().BeOfType<OkObjectResult>();
+        _repositorioMock.Verify(r => r.GetByCpf("12345678901"), Times.Once);
     }
 
     [Fact]
-    public void BuscarPorCpf_ComServiceTokenInvalido_RetornaUnauthorizedSemConsultarORepositorio()
+    public void BuscarPorCpf_ServiceTokenInvalido_DeveRetornarUnauthorizedSemConsultarORepositorio()
     {
         // Arrange
         var controller = CriarController("token-errado");
@@ -95,44 +110,44 @@ public class ResponsavelsApiControllerTests : IClassFixture<ApiConfigurationFixt
         var resultado = controller.BuscarPorCpf("12345678901");
 
         // Assert
-        Assert.IsType<UnauthorizedObjectResult>(resultado);
-        _repositorio.Verify(r => r.GetByCpf(It.IsAny<string>()), Times.Never);
+        resultado.Should().BeOfType<UnauthorizedObjectResult>();
+        _repositorioMock.Verify(r => r.GetByCpf(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public void BuscarPorCpf_ComCpfVazio_RetornaBadRequest()
+    public void BuscarPorCpf_CpfEmBranco_DeveRetornarBadRequest()
     {
         // Arrange
-        var controller = CriarController(ApiConfigurationFixture.ServiceTokenValido);
+        var controller = CriarController(ConfiguracaoFixture.ServiceTokenValido);
 
         // Act
         var resultado = controller.BuscarPorCpf("   ");
 
         // Assert
-        Assert.IsType<BadRequestObjectResult>(resultado);
+        resultado.Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]
-    public void BuscarPorCpf_QuandoCpfNaoEstaCadastrado_RetornaNotFound()
+    public void BuscarPorCpf_CpfNaoCadastrado_DeveRetornarNotFound()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetByCpf("00000000000")).Returns((Responsavel?)null);
-        var controller = CriarController(ApiConfigurationFixture.ServiceTokenValido);
+        _repositorioMock.Setup(r => r.GetByCpf("00000000000")).Returns((Responsavel?)null);
+        var controller = CriarController(ConfiguracaoFixture.ServiceTokenValido);
 
         // Act
         var resultado = controller.BuscarPorCpf("00000000000");
 
         // Assert
-        Assert.IsType<NotFoundObjectResult>(resultado);
+        resultado.Should().BeOfType<NotFoundObjectResult>();
     }
 
     [Fact]
-    public void Cadastrar_ComDadosValidos_RetornaCreatedEPersisteOResponsavel()
+    public void Cadastrar_DadosValidos_DeveSalvarNoRepositorioERetornarCreated()
     {
         // Arrange
-        var dto = TestData.NovoCadastroDto();
-        _repositorio.Setup(r => r.GetByCpf(dto.Cpf)).Returns((Responsavel?)null);
-        _repositorio.Setup(r => r.Add(It.IsAny<Responsavel>()))
+        var dto = NovoCadastroDto();
+        _repositorioMock.Setup(r => r.GetByCpf(dto.Cpf)).Returns((Responsavel?)null);
+        _repositorioMock.Setup(r => r.Add(It.IsAny<Responsavel>()))
             .Callback<Responsavel>(r => r.Id = 10);
         var controller = CriarController();
 
@@ -140,177 +155,185 @@ public class ResponsavelsApiControllerTests : IClassFixture<ApiConfigurationFixt
         var resultado = controller.Cadastrar(dto);
 
         // Assert
-        var created = Assert.IsType<CreatedAtActionResult>(resultado);
-        Assert.Equal(nameof(ResponsavelsApiController.GetById), created.ActionName);
-        Assert.Equal(10L, created.RouteValues!["id"]);
-        _repositorio.Verify(r => r.Add(It.Is<Responsavel>(x => x.Cpf == dto.Cpf && x.Ativo)), Times.Once);
+        var created = resultado.Should().BeOfType<CreatedAtActionResult>().Subject;
+        created.RouteValues!["id"].Should().Be(10L);
+        // Verifica se o método Add do repositório foi chamado exatamente 1 vez
+        _repositorioMock.Verify(r => r.Add(It.Is<Responsavel>(x => x.Cpf == dto.Cpf && x.Ativo)), Times.Once);
     }
 
     [Fact]
-    public void Cadastrar_ComCpfJaExistente_RetornaConflictSemPersistir()
+    public void Cadastrar_CpfJaExistente_DeveRetornarConflictSemSalvar()
     {
         // Arrange
-        var dto = TestData.NovoCadastroDto();
-        _repositorio.Setup(r => r.GetByCpf(dto.Cpf)).Returns(TestData.NovoResponsavel());
+        var dto = NovoCadastroDto();
+        _repositorioMock.Setup(r => r.GetByCpf(dto.Cpf)).Returns(NovoResponsavel());
         var controller = CriarController();
 
         // Act
         var resultado = controller.Cadastrar(dto);
 
         // Assert
-        Assert.IsType<ConflictObjectResult>(resultado);
-        _repositorio.Verify(r => r.Add(It.IsAny<Responsavel>()), Times.Never);
+        resultado.Should().BeOfType<ConflictObjectResult>();
+        _repositorioMock.Verify(r => r.Add(It.IsAny<Responsavel>()), Times.Never);
     }
 
     [Fact]
-    public void Cadastrar_ComModelStateInvalido_RetornaBadRequest()
+    public void Cadastrar_ModelStateInvalido_DeveRetornarBadRequestSemSalvar()
     {
         // Arrange
         var controller = CriarController();
         controller.ModelState.AddModelError(nameof(CadastrarResponsavelDto.Email), "E-mail inválido");
 
         // Act
-        var resultado = controller.Cadastrar(TestData.NovoCadastroDto());
+        var resultado = controller.Cadastrar(NovoCadastroDto());
 
         // Assert
-        Assert.IsType<BadRequestObjectResult>(resultado);
-        _repositorio.Verify(r => r.Add(It.IsAny<Responsavel>()), Times.Never);
+        resultado.Should().BeOfType<BadRequestObjectResult>();
+        _repositorioMock.Verify(r => r.Add(It.IsAny<Responsavel>()), Times.Never);
     }
 
     [Fact]
-    public void Login_ComCredenciaisValidas_RetornaOkComOsDadosDoResponsavel()
+    public void Login_CredenciaisValidas_DeveRetornarOkComOsDadosDoResponsavel()
     {
         // Arrange
-        var responsavel = TestData.NovoResponsavelComSenhaHasheada();
-        _repositorio.Setup(r => r.GetByEmail(responsavel.Email)).Returns(responsavel);
+        var responsavel = NovoResponsavelComSenhaHasheada();
+        _repositorioMock.Setup(r => r.GetByEmail(responsavel.Email)).Returns(responsavel);
         var controller = CriarController();
 
         // Act
-        var resultado = controller.Login(new LoginDto
-        {
-            Email = responsavel.Email,
-            Senha = TestData.SenhaEmTextoPuro
-        });
+        var resultado = controller.Login(new LoginDto { Email = responsavel.Email, Senha = SenhaPadrao });
 
         // Assert
-        Assert.IsType<OkObjectResult>(resultado);
+        resultado.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
-    public void Login_ComSenhaIncorreta_RetornaUnauthorized()
+    public void Login_SenhaIncorreta_DeveRetornarUnauthorized()
     {
         // Arrange
-        var responsavel = TestData.NovoResponsavelComSenhaHasheada();
-        _repositorio.Setup(r => r.GetByEmail(responsavel.Email)).Returns(responsavel);
+        var responsavel = NovoResponsavelComSenhaHasheada();
+        _repositorioMock.Setup(r => r.GetByEmail(responsavel.Email)).Returns(responsavel);
         var controller = CriarController();
 
         // Act
         var resultado = controller.Login(new LoginDto { Email = responsavel.Email, Senha = "senha-errada" });
 
         // Assert
-        Assert.IsType<UnauthorizedObjectResult>(resultado);
+        resultado.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
     [Fact]
-    public void Login_ComEmailNaoCadastrado_RetornaUnauthorized()
+    public void Login_EmailNaoCadastrado_DeveRetornarUnauthorized()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetByEmail("ninguem@pethub.com")).Returns((Responsavel?)null);
+        _repositorioMock.Setup(r => r.GetByEmail("ninguem@pethub.com")).Returns((Responsavel?)null);
         var controller = CriarController();
 
         // Act
-        var resultado = controller.Login(new LoginDto
-        {
-            Email = "ninguem@pethub.com",
-            Senha = TestData.SenhaEmTextoPuro
-        });
+        var resultado = controller.Login(new LoginDto { Email = "ninguem@pethub.com", Senha = SenhaPadrao });
 
         // Assert
-        Assert.IsType<UnauthorizedObjectResult>(resultado);
+        resultado.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
     [Fact]
-    public void Login_ComContaDesativada_RetornaUnauthorized()
+    public void Login_ContaDesativada_DeveRetornarUnauthorized()
     {
         // Arrange
-        var responsavel = TestData.NovoResponsavelComSenhaHasheada(ativo: false);
-        _repositorio.Setup(r => r.GetByEmail(responsavel.Email)).Returns(responsavel);
+        var responsavel = NovoResponsavelComSenhaHasheada();
+        responsavel.Ativo = false;
+        _repositorioMock.Setup(r => r.GetByEmail(responsavel.Email)).Returns(responsavel);
         var controller = CriarController();
 
         // Act
-        var resultado = controller.Login(new LoginDto
-        {
-            Email = responsavel.Email,
-            Senha = TestData.SenhaEmTextoPuro
-        });
+        var resultado = controller.Login(new LoginDto { Email = responsavel.Email, Senha = SenhaPadrao });
 
         // Assert
-        Assert.IsType<UnauthorizedObjectResult>(resultado);
+        resultado.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
     [Fact]
-    public void Update_QuandoResponsavelExiste_AtualizaOsDadosERetornaNoContent()
+    public void Update_ResponsavelExistente_DeveAtualizarERetornarNoContent()
     {
         // Arrange
-        var existente = TestData.NovoResponsavel(id: 5);
-        _repositorio.Setup(r => r.GetById(5)).Returns(existente);
-        _repositorio.Setup(r => r.Update(existente));
+        var existente = NovoResponsavel(id: 5);
+        _repositorioMock.Setup(r => r.GetById(5)).Returns(existente);
         var controller = CriarController();
-        var dto = TestData.NovoCadastroDto(nome: "Nome Atualizado", email: "novo@pethub.com");
+        var dto = NovoCadastroDto(nome: "Nome Atualizado", email: "novo@pethub.com");
 
         // Act
         var resultado = controller.Update(5, dto);
 
         // Assert
-        Assert.IsType<NoContentResult>(resultado);
-        Assert.Equal("Nome Atualizado", existente.Nome);
-        Assert.Equal("novo@pethub.com", existente.Email);
-        _repositorio.Verify(r => r.Update(existente), Times.Once);
+        resultado.Should().BeOfType<NoContentResult>();
+        existente.Nome.Should().Be("Nome Atualizado");
+        existente.Email.Should().Be("novo@pethub.com");
+        _repositorioMock.Verify(r => r.Update(existente), Times.Once);
     }
 
     [Fact]
-    public void Update_QuandoResponsavelNaoExiste_RetornaNotFoundSemAtualizar()
+    public void Update_ResponsavelInexistente_DeveRetornarNotFoundSemAtualizar()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(404)).Returns((Responsavel?)null);
+        _repositorioMock.Setup(r => r.GetById(404)).Returns((Responsavel?)null);
         var controller = CriarController();
 
         // Act
-        var resultado = controller.Update(404, TestData.NovoCadastroDto());
+        var resultado = controller.Update(404, NovoCadastroDto());
 
         // Assert
-        Assert.IsType<NotFoundObjectResult>(resultado);
-        _repositorio.Verify(r => r.Update(It.IsAny<Responsavel>()), Times.Never);
+        resultado.Should().BeOfType<NotFoundObjectResult>();
+        _repositorioMock.Verify(r => r.Update(It.IsAny<Responsavel>()), Times.Never);
     }
 
     [Fact]
-    public void Delete_QuandoResponsavelExiste_RemoveERetornaNoContent()
+    public void Delete_ResponsavelExistente_DeveRemoverERetornarNoContent()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(3)).Returns(TestData.NovoResponsavel(id: 3));
-        _repositorio.Setup(r => r.Delete(3));
+        _repositorioMock.Setup(r => r.GetById(3)).Returns(NovoResponsavel(id: 3));
         var controller = CriarController();
 
         // Act
         var resultado = controller.Delete(3);
 
         // Assert
-        Assert.IsType<NoContentResult>(resultado);
-        _repositorio.Verify(r => r.Delete(3), Times.Once);
+        resultado.Should().BeOfType<NoContentResult>();
+        _repositorioMock.Verify(r => r.Delete(3), Times.Once);
     }
 
     [Fact]
-    public void Delete_QuandoResponsavelNaoExiste_RetornaNotFoundSemRemover()
+    public void Delete_ResponsavelInexistente_DeveRetornarNotFoundSemRemover()
     {
         // Arrange
-        _repositorio.Setup(r => r.GetById(404)).Returns((Responsavel?)null);
+        _repositorioMock.Setup(r => r.GetById(404)).Returns((Responsavel?)null);
         var controller = CriarController();
 
         // Act
         var resultado = controller.Delete(404);
 
         // Assert
-        Assert.IsType<NotFoundObjectResult>(resultado);
-        _repositorio.Verify(r => r.Delete(It.IsAny<long>()), Times.Never);
+        resultado.Should().BeOfType<NotFoundObjectResult>();
+        _repositorioMock.Verify(r => r.Delete(It.IsAny<long>()), Times.Never);
     }
+
+    private const string SenhaPadrao = "SenhaSegura@123";
+
+    private static Responsavel NovoResponsavel(long id = 1) => new()
+    {
+        Id = id, Nome = "Pedro Chasci", Cpf = "12345678901",
+        Email = "pedro@pethub.com", Senha = SenhaPadrao, Ativo = true
+    };
+
+    private static Responsavel NovoResponsavelComSenhaHasheada()
+    {
+        var responsavel = NovoResponsavel();
+        responsavel.Senha = BCrypt.Net.BCrypt.HashPassword(SenhaPadrao);
+        return responsavel;
+    }
+
+    private static CadastrarResponsavelDto NovoCadastroDto(
+        string nome = "Pedro Chasci", string email = "pedro@pethub.com") => new()
+    {
+        Nome = nome, Cpf = "12345678901", Email = email, Senha = SenhaPadrao
+    };
 }

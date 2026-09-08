@@ -1,103 +1,117 @@
+// Importa o validador de Data Annotations usado pelas entidades
 using System.ComponentModel.DataAnnotations;
-using Vitalis.Tests.Unit.Fixtures;
+// Importa o FluentAssertions para sintaxe expressiva de asserção
+using FluentAssertions;
+// Importa o xUnit para anotações e execução de testes
+using Xunit;
 
 namespace Vitalis.Tests.Unit.Dominio;
 
-/// <summary>Testes das regras de validação de <see cref="ResponsavelEndereco"/> e <see cref="ResponsavelContato"/>.</summary>
+// Suíte de testes unitários das regras de Endereço e Contato do Responsável
 public class ResponsavelEnderecoTests
 {
     [Fact]
-    public void Validar_EnderecoCompleto_RetornaValido()
+    public void Validar_EnderecoCompleto_DeveRetornarSemErros()
     {
         // Arrange
-        var endereco = TestData.NovoEndereco();
+        var endereco = NovoEnderecoValido();
 
         // Act
-        var resultados = Validar(endereco);
+        var erros = Validar(endereco);
 
         // Assert
-        Assert.Empty(resultados);
+        erros.Should().BeEmpty();
     }
 
     [Fact]
-    public void Validar_EnderecoComEstadoAcimaDeDoisCaracteres_RetornaErroDeTamanho()
+    public void Validar_EstadoAcimaDeDoisCaracteres_DeveRetornarErroNoCampoEstado()
     {
         // Arrange
-        var endereco = TestData.NovoEndereco();
+        var endereco = NovoEnderecoValido();
         endereco.Estado = "São Paulo";
 
         // Act
-        var resultados = Validar(endereco);
+        var erros = Validar(endereco);
 
         // Assert
-        Assert.Contains(resultados, r => r.MemberNames.Contains(nameof(ResponsavelEndereco.Estado)));
+        erros.Should().Contain(e => e.MemberNames.Contains(nameof(ResponsavelEndereco.Estado)));
     }
 
     [Fact]
-    public void Validar_EnderecoComCepAcimaDeOitoCaracteres_RetornaErroDeTamanho()
+    public void Validar_CepAcimaDeOitoCaracteres_DeveRetornarErroNoCampoCep()
     {
         // Arrange
-        var endereco = TestData.NovoEndereco();
+        var endereco = NovoEnderecoValido();
         endereco.Cep = "013101000000";
 
         // Act
-        var resultados = Validar(endereco);
+        var erros = Validar(endereco);
 
         // Assert
-        Assert.Contains(resultados, r => r.MemberNames.Contains(nameof(ResponsavelEndereco.Cep)));
+        erros.Should().Contain(e => e.MemberNames.Contains(nameof(ResponsavelEndereco.Cep)));
     }
 
     [Fact]
-    public void Validar_EnderecoSemComplemento_RetornaValidoPorSerCampoOpcional()
+    public void Validar_SemComplemento_DeveRetornarSemErrosPorSerCampoOpcional()
     {
         // Arrange
-        var endereco = TestData.NovoEndereco();
+        var endereco = NovoEnderecoValido();
         endereco.Complemento = null;
 
         // Act
-        var resultados = Validar(endereco);
+        var erros = Validar(endereco);
 
         // Assert
-        Assert.Empty(resultados);
+        erros.Should().BeEmpty();
     }
 
     [Fact]
-    public void NovoEndereco_QuandoInstanciado_NaoEhPrincipalPorPadrao()
+    public void NovoEndereco_QuandoInstanciado_NaoDeveSerPrincipalPorPadrao()
     {
         // Arrange & Act
-        var endereco = new ResponsavelEndereco
-        {
-            Logradouro = "Rua das Flores",
-            Numero = "10",
-            Bairro = "Centro",
-            Cidade = "Campinas",
-            Estado = "SP",
-            Cep = "13010000"
-        };
+        var endereco = NovoEnderecoValido();
 
         // Assert
-        Assert.False(endereco.Principal);
+        endereco.Principal.Should().BeFalse();
     }
 
     [Fact]
-    public void Validar_ContatoSemTelefone_RetornaErroDeCampoObrigatorio()
+    public void Validar_ContatoSemTelefone_DeveRetornarErroNoCampoTelefone()
     {
         // Arrange
-        var contato = TestData.NovoContato();
-        contato.Telefone = null!;
+        var contato = new ResponsavelContato
+        {
+            ResponsavelId = 1,
+            Tipo = "CELULAR",
+            Telefone = null!
+        };
 
         // Act
-        var resultados = new List<ValidationResult>();
-        Validator.TryValidateObject(contato, new ValidationContext(contato), resultados, validateAllProperties: true);
+        var erros = new List<ValidationResult>();
+        Validator.TryValidateObject(contato, new ValidationContext(contato), erros, true);
 
         // Assert
-        Assert.Contains(resultados, r => r.MemberNames.Contains(nameof(ResponsavelContato.Telefone)));
+        erros.Should().Contain(e => e.MemberNames.Contains(nameof(ResponsavelContato.Telefone)));
     }
 
-    private static IReadOnlyList<ValidationResult> Validar(ResponsavelEndereco endereco)
+    // Cria um endereço válido reutilizado na preparação dos cenários
+    private static ResponsavelEndereco NovoEnderecoValido() => new()
     {
-        var resultados = new List<ValidationResult>();
-        Validator.TryValidateObject(endereco, new ValidationContext(endereco), resultados, validateAllProperties: true);
-        return resultados;
+        ResponsavelId = 1,
+        Logradouro    = "Av. Paulista",
+        Numero        = "1000",
+        Complemento   = "Sala 42",
+        Bairro        = "Bela Vista",
+        Cidade        = "São Paulo",
+        Estado        = "SP",
+        Cep           = "01310100"
+    };
+
+    // Executa a validação por Data Annotations e devolve os erros encontrados
+    private static List<ValidationResult> Validar(ResponsavelEndereco endereco)
+    {
+        var erros = new List<ValidationResult>();
+        Validator.TryValidateObject(endereco, new ValidationContext(endereco), erros, true);
+        return erros;
     }
 }

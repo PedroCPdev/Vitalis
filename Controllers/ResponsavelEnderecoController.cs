@@ -6,22 +6,37 @@ using Vitalis.Repositories;
 public class ResponsavelEnderecoController : ControllerBase
 {
     private readonly IResponsavelEnderecoRepository _repo;
+    // Logger usado para o registro estruturado das operações do controller
+    private readonly ILogger<ResponsavelEnderecoController> _logger;
 
-    public ResponsavelEnderecoController(IResponsavelEnderecoRepository repo)
+    public ResponsavelEnderecoController(
+        IResponsavelEnderecoRepository repo,
+        ILogger<ResponsavelEnderecoController> logger)
     {
         _repo = repo;
+        _logger = logger;
     }
 
     [HttpGet]
     public IActionResult GetAll(long responsavelId)
-        => Ok(_repo.GetByResponsavelId(responsavelId));
+    {
+        // Grava log estruturado contendo o responsável consultado
+        _logger.LogInformation("Buscando endereços do responsável {ResponsavelId}.", responsavelId);
+
+        return Ok(_repo.GetByResponsavelId(responsavelId));
+    }
 
     [HttpGet("{id:long}")]
     public IActionResult GetById(long responsavelId, long id)
     {
         var endereco = _repo.GetById(id);
         if (endereco == null || endereco.ResponsavelId != responsavelId)
+        {
+            // Grava log de aviso indicando recurso não encontrado
+            _logger.LogWarning("Endereço {EnderecoId} não encontrado para o responsável {ResponsavelId}.",
+                id, responsavelId);
             return NotFound(new { erro = "Endereço não encontrado" });
+        }
 
         return Ok(endereco);
     }
@@ -34,6 +49,10 @@ public class ResponsavelEnderecoController : ControllerBase
 
         endereco.ResponsavelId = responsavelId;
         _repo.Add(endereco);
+
+        _logger.LogInformation("Endereço {EnderecoId} cadastrado para o responsável {ResponsavelId}.",
+            endereco.Id, responsavelId);
+
         return CreatedAtAction(nameof(GetById),
             new { responsavelId, id = endereco.Id }, endereco);
     }

@@ -1,17 +1,19 @@
+// Importa abstrações de contexto do ASP.NET Core
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+// Importa a configuração usada pelos controllers
 using Microsoft.Extensions.Configuration;
 
 namespace Vitalis.Tests.Unit.Fixtures;
 
-/// <summary>
-/// Class fixture com o contexto compartilhado pelos testes de controller: a configuração
-/// contendo o <c>ServiceToken</c> e utilitários para montar o <see cref="HttpContext"/>.
-/// </summary>
-public sealed class ApiConfigurationFixture
+// Fixture compartilhada pelos testes de aplicação: fornece a configuração com o
+// Service Token e monta o HttpContext necessário para os controllers
+public class ConfiguracaoFixture
 {
+    // Token de serviço válido usado nos cenários de integração com o backend Java
     public const string ServiceTokenValido = "token-de-teste-2026";
 
+    // Configuração em memória contendo o Service Token esperado pelos controllers
     public IConfiguration Configuration { get; } = new ConfigurationBuilder()
         .AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -19,7 +21,7 @@ public sealed class ApiConfigurationFixture
         })
         .Build();
 
-    /// <summary>Associa um <see cref="HttpContext"/> ao controller, opcionalmente com o token de serviço.</summary>
+    // Associa um HttpContext ao controller, opcionalmente com o header do Service Token
     public static T ComHttpContext<T>(T controller, string? serviceToken = null) where T : ControllerBase
     {
         var httpContext = new DefaultHttpContext();
